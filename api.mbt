@@ -17,19 +17,18 @@ pub fn program_from_text(src : String) -> Database raise LoveError {
 }
 
 ///|
-/// 把子句文本加载进已有数据库
-pub fn load_program(db : Database, src : String) -> Database raise LoveError {
+/// 把子句文本加载进已有数据库（原地修改 `db`）
+pub fn load_program(db : Database, src : String) -> Unit raise LoveError {
   let clauses = parse_program_text(src)
   for c in clauses {
     db.add_clause(c.head, c.body)
   }
-  db
 }
 
 ///|
 /// 把程序文本加载进会话的数据库（`[file].` 导入用）
 pub fn load_text(session : Session, src : String) -> Unit raise LoveError {
-  let _ = load_program(session.db, src)
+  load_program(session.db, src)
 }
 
 ///|

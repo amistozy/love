@@ -483,7 +483,7 @@ fn read_file_safe(path : String) -> String? {
 /// 解析并加载程序文本，失败返回 `false`（语法错误等）
 fn load_program_safe(db : Database, src : String) -> Bool {
   try {
-    let _ = load_program(db, src)
+    load_program(db, src)
     true
   } catch {
     _ => false
