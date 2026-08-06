@@ -102,17 +102,33 @@ struct Session {
   counter : Ref[Int]
   output : StringBuilder
   mut halt : Bool
+  mut quiet : Bool
 }
 
 ///|
 pub fn Session::new(db : Database) -> Session {
-  { db, counter: Ref(0), output: StringBuilder(), halt: false }
+  { db, counter: Ref(0), output: StringBuilder(), halt: false, quiet: false }
 }
 
 ///|
 /// `halt` 谓词是否已请求退出（REPL 据此结束循环）
 pub fn Session::halt_requested(self : Session) -> Bool {
   self.halt
+}
+
+///|
+/// `quiet` 标志是否已设置（由 `cls` 等纯副作用谓词设置，不读取）
+pub fn Session::quiet_requested(self : Session) -> Bool {
+  self.quiet
+}
+
+///|
+/// 取走 `quiet` 标志并重置。
+/// `quiet` 由纯副作用谓词（如 `cls`）设置，REPL 据此不显示 `true.`。
+pub fn Session::take_quiet(self : Session) -> Bool {
+  let q = self.quiet
+  self.quiet = false
+  q
 }
 
 ///|

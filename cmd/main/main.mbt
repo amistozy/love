@@ -25,35 +25,44 @@ async fn main {
     if session.halt_requested() {
       break
     }
+    // 多行输入：累积各行直到输入以 `.` 结束，未结束则用 ` | ` 续行
+    let buf = StringBuilder()
     @stdio.stdout.write("?- ")
-    let line = @stdio.stdin.read_until("\n")
-    match line {
-      None => break
-      Some(text) => {
-        let t = text.trim().to_owned()
-        if t.is_empty() || t == "." {
-          // 空行或上一查询结束的残留 `.`
-          continue
-        }
-        // 查询（含内建谓词）可能抛出 LoveError，统一在此捕获
-        try {
-          // `[name].` 是 `consult(name).` 的语法糖（参考 Scryer toplevel.pl 的
-          // instruction_match：读入的单元素列表且元素为原子时转成 consult 查询）
-          let is_consult = match @love.parse_query_text(t) {
-            [Compound(".", [Atom(name), Atom("[]")])] => Some(name)
-            _ => None
+    for ;; {
+      let line = @stdio.stdin.read_until("\n")
+      match line {
+        None => break
+        Some(text) => {
+          buf.write_string(text)
+          if buf.to_string().trim().has_suffix(".") {
+            break
           }
-          match is_consult {
-            Some(name) => run_query(session, "consult(\{name}).")
-            None => run_query(session, t)
-          }
-        } catch {
-          @love.LoveError::Msg(m) => @stdio.stdout.write("error: \{m}\n")
-          _ => @stdio.stdout.write("error: unexpected failure\n")
-        } noraise {
-          _ => ()
+          @stdio.stdout.write(" | ")
         }
       }
+    }
+    let t = buf.to_string().trim().to_owned()
+    if t.is_empty() || t == "." {
+      // 空行或上一查询结束的残留 `.`
+      continue
+    }
+    // 查询（含内建谓词）可能抛出 LoveError，统一在此捕获
+    try {
+      // `[name].` 是 `consult(name).` 的语法糖（参考 Scryer toplevel.pl 的
+      // instruction_match：读入的单元素列表且元素为原子时转成 consult 查询）
+      let is_consult = match @love.parse_query_text(t) {
+        [Compound(".", [Atom(name), Atom("[]")])] => Some(name)
+        _ => None
+      }
+      match is_consult {
+        Some(name) => run_query(session, "consult(\{name}).")
+        None => run_query(session, t)
+      }
+    } catch {
+      @love.LoveError::Msg(m) => @stdio.stdout.write("error: \{m}\n\n")
+      _ => @stdio.stdout.write("error: unexpected failure\n\n")
+    } noraise {
+      _ => ()
     }
   }
 }
@@ -89,8 +98,12 @@ async fn run_query(session : @love.Session, src : String) -> Unit {
         )
         shown = shown + 1
       }
-      // 无绑定变量的解（如 let/del/cls 等断言成功）：`true.` 直接结束，不等待后缀
+      // 无绑定变量的解（如 let/del 断言成功）：`true.` 直接结束，不等待后缀。
+      // 纯副作用谓词（如 cls）设置了 quiet：不显示 `true.`（标志由末尾 take_quiet 重置）
       if shown == 0 {
+        if session.quiet_requested() {
+          break
+        }
         @stdio.stdout.write("true.\n")
         break
       }
@@ -112,6 +125,9 @@ async fn run_query(session : @love.Session, src : String) -> Unit {
       break
     }
   }
-  // 查询结束：空行分隔下一个 `?- ` 提示符
-  @stdio.stdout.write("\n")
+  // 查询结束：空行分隔下一个 `?- ` 提示符。
+  // 纯副作用谓词（如 cls）设置了 quiet：取走标志，不打印空行
+  if !session.take_quiet() {
+    @stdio.stdout.write("\n")
+  }
 }

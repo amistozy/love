@@ -426,8 +426,10 @@ fn builtin_table() -> Map[String, (Term, Engine) -> BuiltinResult] {
       }
     },
     "cls/0": (_g, e) => {
-      // ANSI 清屏 + 光标归位（写入会话输出缓冲，REPL drain 时输出）
+      // ANSI 清屏 + 光标归位（写入会话输出缓冲，REPL drain 时输出）。
+      // 设置 quiet 标志，REPL 据此不显示 `true.`
       e.session.output.write_string("\u{1b}[2J\u{1b}[H")
+      e.session.quiet = true
       Succeed
     },
     "halt/0": (_g, e) => {

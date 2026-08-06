@@ -76,6 +76,8 @@ type Session
 pub fn Session::drain_output(Self) -> String
 pub fn Session::halt_requested(Self) -> Bool
 pub fn Session::new(Database) -> Self
+pub fn Session::quiet_requested(Self) -> Bool
+pub fn Session::take_quiet(Self) -> Bool
 
 pub(all) enum Term {
   Int(Int)
