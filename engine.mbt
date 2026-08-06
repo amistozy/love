@@ -288,6 +288,13 @@ pub fn Engine::next_solution(self : Engine) -> Env? {
 /// 求解当前目标 `g`（goals[0]）。成功时推进 goals，返回 true；
 /// 失败时返回 false（调用方负责回溯）。
 fn Engine::solve_goal(self : Engine, g : Term) -> Bool {
+  // 目标先沿环境展开：绑定到具体项则按其求解；
+  // 变量或数字不能作为目标（如 `?- X.` / `?- 1.`），失败而非崩溃
+  let g = match walk(g, self.env) {
+    Var(_) => return false
+    Int(_) => return false
+    other => other
+  }
   // 析取 (A ; B)：展开为两个内联候选，先 A 后 B（回溯时尝试 B）
   match g {
     Compound(";", [a, b]) => {

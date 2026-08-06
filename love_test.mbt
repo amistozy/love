@@ -257,6 +257,23 @@ test "let and del builtins" {
 }
 
 ///|
+test "variable or number as goal fails" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  // 未绑定变量不能作为目标（不崩溃，失败）
+  @love.answers_string(session, "?- X.", out) |> inspect(content="false")
+  // 数字不能作为目标
+  @love.answers_string(session, "?- 1.", out) |> inspect(content="false")
+  // 变量绑定到复合项后按其求解（foo/1 未定义 → 失败）
+  @love.answers_string(session, "?- X = foo(1), X.", out)
+  |> inspect(content="false")
+  // 绑定到已定义谓词则正常求解（X 作为查询变量被显示）
+  let _ = @love.load_text(session, "bar(7).")
+  @love.answers_string(session, "?- X = bar(7), X.", out)
+  |> inspect(content="X = bar(7)")
+}
+
+///|
 test "cls halt consult builtins" {
   let session = @love.Session::new(@love.Database::new())
   let out = StringBuilder()

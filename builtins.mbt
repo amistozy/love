@@ -98,355 +98,275 @@ fn fresh_list(e : Engine, len : Int) -> Term {
 }
 
 ///|
-/// 内建谓词表：谓词键 -> 实现
-fn builtin_table() -> Map[String, (Term, Engine) -> BuiltinResult] {
-  let table : Map[String, (Term, Engine) -> BuiltinResult] = {
-    "true/0": (_g, _e) => Succeed,
-    "fail/0": (_g, _e) => Fail,
-    "=/2": (g, e) => {
-      match g {
-        Compound(_, [a, b]) =>
-          match unify(a, b, e.env) {
+/// 内建谓词表：谓词键 -> 实现（接收参数数组）
+fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
+  let table : Map[String, (Array[Term], Engine) -> BuiltinResult] = {
+    "true/0": (_args, _e) => Succeed,
+    "fail/0": (_args, _e) => Fail,
+    "=/2": (args, e) => {
+      guard args is [a, b] else { Fail }
+      match unify(a, b, e.env) {
+        Some(env) => SucceedEnv(env)
+        None => Fail
+      }
+    },
+    "\\=/2": (args, e) => {
+      guard args is [a, b] else { Fail }
+      match unify(a, b, e.env) {
+        Some(_) => Fail
+        None => Succeed
+      }
+    },
+    "==/2": (args, e) => {
+      guard args is [a, b] else { Fail }
+      if term_identical(a, b, e.env) {
+        Succeed
+      } else {
+        Fail
+      }
+    },
+    "\\==/2": (args, e) => {
+      guard args is [a, b] else { Fail }
+      if term_identical(a, b, e.env) {
+        Fail
+      } else {
+        Succeed
+      }
+    },
+    "var/1": (args, e) => {
+      guard args is [a] else { Fail }
+      match walk(a, e.env) {
+        Var(_) => Succeed
+        _ => Fail
+      }
+    },
+    "nonvar/1": (args, e) => {
+      guard args is [a] else { Fail }
+      match walk(a, e.env) {
+        Var(_) => Fail
+        _ => Succeed
+      }
+    },
+    "atom/1": (args, e) => {
+      guard args is [a] else { Fail }
+      match walk(a, e.env) {
+        Atom(_) => Succeed
+        _ => Fail
+      }
+    },
+    "integer/1": (args, e) => {
+      guard args is [a] else { Fail }
+      match walk(a, e.env) {
+        Int(_) => Succeed
+        _ => Fail
+      }
+    },
+    "atomic/1": (args, e) => {
+      guard args is [a] else { Fail }
+      match walk(a, e.env) {
+        Atom(_) | Int(_) => Succeed
+        _ => Fail
+      }
+    },
+    "compound/1": (args, e) => {
+      guard args is [a] else { Fail }
+      match walk(a, e.env) {
+        Compound(_, _) => Succeed
+        _ => Fail
+      }
+    },
+    "ground/1": (args, e) => {
+      guard args is [a] else { Fail }
+      if is_ground(a, e.env) {
+        Succeed
+      } else {
+        Fail
+      }
+    },
+    "is/2": (args, e) => {
+      guard args is [target, expr] else { Fail }
+      try eval_arith(expr, e.env) catch {
+        _ => Fail
+      } noraise {
+        n =>
+          match unify(target, Int(n), e.env) {
             Some(env) => SucceedEnv(env)
             None => Fail
           }
-        _ => Fail
       }
     },
-    "\\=/2": (g, e) => {
-      match g {
-        Compound(_, [a, b]) =>
-          match unify(a, b, e.env) {
-            Some(_) => Fail
-            None => Succeed
-          }
-        _ => Fail
+    "=:=/2": (args, e) => arith_cmp(args, e, (x, y) => x == y),
+    "=\\=/2": (args, e) => arith_cmp(args, e, (x, y) => x != y),
+    "</2": (args, e) => arith_cmp(args, e, (x, y) => x < y),
+    ">/2": (args, e) => arith_cmp(args, e, (x, y) => x > y),
+    "=</2": (args, e) => arith_cmp(args, e, (x, y) => x <= y),
+    ">=/2": (args, e) => arith_cmp(args, e, (x, y) => x >= y),
+    "\\+/1": (args, e) => {
+      guard args is [a] else { Fail }
+      if sub_has_solution(e, [a], e.env) {
+        Fail
+      } else {
+        Succeed
       }
     },
-    "==/2": (g, e) => {
-      match g {
-        Compound(_, [a, b]) =>
-          if term_identical(a, b, e.env) {
-            Succeed
-          } else {
-            Fail
-          }
-        _ => Fail
+    "not/1": (args, e) => {
+      guard args is [a] else { Fail }
+      if sub_has_solution(e, [a], e.env) {
+        Fail
+      } else {
+        Succeed
       }
     },
-    "\\==/2": (g, e) => {
-      match g {
-        Compound(_, [a, b]) =>
-          if term_identical(a, b, e.env) {
-            Fail
-          } else {
-            Succeed
-          }
-        _ => Fail
-      }
+    "member/2": (args, e) => {
+      guard args is [x, l] else { Fail }
+      let h = Var(fresh_var_name(e, "H"))
+      let t = Var(fresh_var_name(e, "T"))
+      Choice(e.env, [
+        Inline([(l, Compound(".", [x, t]))], []),
+        Inline([(l, Compound(".", [h, t]))], [Compound("member", [x, t])]),
+      ])
     },
-    "var/1": (g, e) => {
-      match g {
-        Compound(_, [a]) =>
-          match walk(a, e.env) {
-            Var(_) => Succeed
-            _ => Fail
-          }
-        _ => Fail
-      }
-    },
-    "nonvar/1": (g, e) => {
-      match g {
-        Compound(_, [a]) =>
-          match walk(a, e.env) {
-            Var(_) => Fail
-            _ => Succeed
-          }
-        _ => Fail
-      }
-    },
-    "atom/1": (g, e) => {
-      match g {
-        Compound(_, [a]) =>
-          match walk(a, e.env) {
-            Atom(_) => Succeed
-            _ => Fail
-          }
-        _ => Fail
-      }
-    },
-    "integer/1": (g, e) => {
-      match g {
-        Compound(_, [a]) =>
-          match walk(a, e.env) {
-            Int(_) => Succeed
-            _ => Fail
-          }
-        _ => Fail
-      }
-    },
-    "atomic/1": (g, e) => {
-      match g {
-        Compound(_, [a]) =>
-          match walk(a, e.env) {
-            Atom(_) | Int(_) => Succeed
-            _ => Fail
-          }
-        _ => Fail
-      }
-    },
-    "compound/1": (g, e) => {
-      match g {
-        Compound(_, [a]) =>
-          match walk(a, e.env) {
-            Compound(_, _) => Succeed
-            _ => Fail
-          }
-        _ => Fail
-      }
-    },
-    "ground/1": (g, e) => {
-      match g {
-        Compound(_, [a]) => if is_ground(a, e.env) { Succeed } else { Fail }
-        _ => Fail
-      }
-    },
-    "is/2": (g, e) => {
-      match g {
-        Compound(_, [target, expr]) => {
-          let result = try eval_arith(expr, e.env) catch {
-            _ => Fail
-          } noraise {
-            n =>
-              match unify(target, Int(n), e.env) {
-                Some(env) => SucceedEnv(env)
-                None => Fail
-              }
-          }
-          result
+    "length/2": (args, e) => {
+      guard args is [l, n] else { Fail }
+      let wl = walk(l, e.env)
+      let wn = walk(n, e.env)
+      if is_closed_list(wl, e.env) {
+        // L 已闭合：直接计数
+        let len = list_length(wl, e.env)
+        match unify(n, Int(len), e.env) {
+          Some(env) => SucceedEnv(env)
+          None => Fail
         }
-        _ => Fail
-      }
-    },
-    "=:=/2": (g, e) => arith_cmp(g, e, (x, y) => x == y),
-    "=\\=/2": (g, e) => arith_cmp(g, e, (x, y) => x != y),
-    "</2": (g, e) => arith_cmp(g, e, (x, y) => x < y),
-    ">/2": (g, e) => arith_cmp(g, e, (x, y) => x > y),
-    "=</2": (g, e) => arith_cmp(g, e, (x, y) => x <= y),
-    ">=/2": (g, e) => arith_cmp(g, e, (x, y) => x >= y),
-    "\\+/1": (g, e) => {
-      match g {
-        Compound(_, [a]) =>
-          if sub_has_solution(e, [a], e.env) {
-            Fail
-          } else {
-            Succeed
-          }
-        _ => Fail
-      }
-    },
-    "not/1": (g, e) => {
-      match g {
-        Compound(_, [a]) =>
-          if sub_has_solution(e, [a], e.env) {
-            Fail
-          } else {
-            Succeed
-          }
-        _ => Fail
-      }
-    },
-    "member/2": (g, e) => {
-      match g {
-        Compound(_, [x, l]) => {
-          let h = Var(fresh_var_name(e, "H"))
-          let t = Var(fresh_var_name(e, "T"))
-          Choice(e.env, [
-            Inline([(l, Compound(".", [x, t]))], []),
-            Inline([(l, Compound(".", [h, t]))], [Compound("member", [x, t])]),
-          ])
-        }
-        _ => Fail
-      }
-    },
-    "length/2": (g, e) => {
-      match g {
-        Compound(_, [l, n]) => {
-          let wl = walk(l, e.env)
-          let wn = walk(n, e.env)
-          if is_closed_list(wl, e.env) {
-            // L 已闭合：直接计数
-            let len = list_length(wl, e.env)
-            match unify(n, Int(len), e.env) {
+      } else {
+        match wn {
+          Int(len) if len >= 0
+          // N 已绑定：生成长度为 len 的变量列表
+          => {
+            let list = fresh_list(e, len)
+            match unify(l, list, e.env) {
               Some(env) => SucceedEnv(env)
               None => Fail
             }
-          } else {
-            match wn {
-              Int(len) if len >= 0
-              // N 已绑定：生成长度为 len 的变量列表
-              => {
-                let list = fresh_list(e, len)
-                match unify(l, list, e.env) {
-                  Some(env) => SucceedEnv(env)
-                  None => Fail
-                }
-              }
-              // 通用递归展开（L 未闭合或 N 未绑定；可能无限枚举）
-              _ => {
-                let h = Var(fresh_var_name(e, "H"))
-                let t = Var(fresh_var_name(e, "T"))
-                let n1 = Var(fresh_var_name(e, "N"))
-                Choice(e.env, [
-                  Inline([(l, Atom("[]")), (n, Int(0))], []),
-                  Inline([(l, Compound(".", [h, t]))], [
-                    Compound("length", [t, n1]),
-                    Compound("is", [n, Compound("+", [n1, Int(1)])]),
-                  ]),
-                ])
-              }
-            }
+          }
+          // 通用递归展开（L 未闭合或 N 未绑定；可能无限枚举）
+          _ => {
+            let h = Var(fresh_var_name(e, "H"))
+            let t = Var(fresh_var_name(e, "T"))
+            let n1 = Var(fresh_var_name(e, "N"))
+            Choice(e.env, [
+              Inline([(l, Atom("[]")), (n, Int(0))], []),
+              Inline([(l, Compound(".", [h, t]))], [
+                Compound("length", [t, n1]),
+                Compound("is", [n, Compound("+", [n1, Int(1)])]),
+              ]),
+            ])
           }
         }
-        _ => Fail
       }
     },
-    "append/3": (g, e) => {
-      match g {
-        Compound(_, [a, b, c]) => {
-          let h = Var(fresh_var_name(e, "H"))
-          let t1 = Var(fresh_var_name(e, "T1"))
-          let r1 = Var(fresh_var_name(e, "R1"))
-          Choice(e.env, [
-            Inline([(a, Atom("[]")), (c, b)], []),
-            Inline([(a, Compound(".", [h, t1])), (c, Compound(".", [h, r1]))], [
-              Compound("append", [t1, b, r1]),
-            ]),
-          ])
-        }
-        _ => Fail
+    "append/3": (args, e) => {
+      guard args is [a, b, c] else { Fail }
+      let h = Var(fresh_var_name(e, "H"))
+      let t1 = Var(fresh_var_name(e, "T1"))
+      let r1 = Var(fresh_var_name(e, "R1"))
+      Choice(e.env, [
+        Inline([(a, Atom("[]")), (c, b)], []),
+        Inline([(a, Compound(".", [h, t1])), (c, Compound(".", [h, r1]))], [
+          Compound("append", [t1, b, r1]),
+        ]),
+      ])
+    },
+    "findall/3": (args, e) => {
+      guard args is [t, goal, l] else { Fail }
+      let envs = sub_solve_all(e, [goal], e.env)
+      let terms = envs.map(env => walk_deep(t, env))
+      let list = make_list(terms)
+      match unify(l, list, e.env) {
+        Some(env) => SucceedEnv(env)
+        None => Fail
       }
     },
-    "findall/3": (g, e) => {
-      match g {
-        Compound(_, [t, goal, l]) => {
-          let envs = sub_solve_all(e, [goal], e.env)
-          let terms = envs.map(env => walk_deep(t, env))
-          let list = make_list(terms)
-          match unify(l, list, e.env) {
-            Some(env) => SucceedEnv(env)
-            None => Fail
-          }
-        }
-        _ => Fail
-      }
+    "write/1": (args, e) => {
+      guard args is [a] else { Fail }
+      e.session.output.write_string(term_to_string_plain(a, e.env))
+      Succeed
     },
-    "write/1": (g, e) => {
-      match g {
-        Compound(_, [a]) => {
-          e.session.output.write_string(term_to_string_plain(a, e.env))
-          Succeed
-        }
-        _ => Fail
-      }
-    },
-    "writeln/1": (g, e) => {
-      match g {
-        Compound(_, [a]) => {
-          e.session.output.write_string(term_to_string_plain(a, e.env))
-          e.session.output.write_string("\n")
-          Succeed
-        }
-        _ => Fail
-      }
+    "writeln/1": (args, e) => {
+      guard args is [a] else { Fail }
+      e.session.output.write_string(term_to_string_plain(a, e.env))
+      e.session.output.write_string("\n")
+      Succeed
     },
     "nl/0": (_g, e) => {
       e.session.output.write_string("\n")
       Succeed
     },
-    "atom_length/2": (g, e) => {
-      match g {
-        Compound(_, [a, n]) =>
-          match walk(a, e.env) {
-            Atom(s) =>
-              match unify(n, Int(s.length()), e.env) {
-                Some(env) => SucceedEnv(env)
-                None => Fail
-              }
-            _ => Fail
+    "atom_length/2": (args, e) => {
+      guard args is [a, n] else { Fail }
+      match walk(a, e.env) {
+        Atom(s) =>
+          match unify(n, Int(s.length()), e.env) {
+            Some(env) => SucceedEnv(env)
+            None => Fail
           }
         _ => Fail
       }
     },
-    "char_code/2": (g, e) => {
-      match g {
-        Compound(_, [c, code]) => {
-          let wc = walk(c, e.env)
-          let wcode = walk(code, e.env)
-          match (wc, wcode) {
-            (Atom(s), _) if s.length() == 1 =>
-              match unify(code, Int(s[0].to_int()), e.env) {
-                Some(env) => SucceedEnv(env)
-                None => Fail
-              }
-            (_, Int(n)) if n >= 0 && n <= 0x10FFFF => {
-              let ch : Char = Int::unsafe_to_char(n)
-              match unify(c, Atom(ch.to_string()), e.env) {
-                Some(env) => SucceedEnv(env)
-                None => Fail
-              }
-            }
-            _ => Fail
+    "char_code/2": (args, e) => {
+      guard args is [c, code] else { Fail }
+      let wc = walk(c, e.env)
+      let wcode = walk(code, e.env)
+      match (wc, wcode) {
+        (Atom(s), _) if s.length() == 1 =>
+          match unify(code, Int(s[0].to_int()), e.env) {
+            Some(env) => SucceedEnv(env)
+            None => Fail
+          }
+        (_, Int(n)) if n >= 0 && n <= 0x10FFFF => {
+          let ch : Char = Int::unsafe_to_char(n)
+          match unify(c, Atom(ch.to_string()), e.env) {
+            Some(env) => SucceedEnv(env)
+            None => Fail
           }
         }
         _ => Fail
       }
     },
-    "let/1": (g, e) => {
-      match g {
-        Compound(_, [t]) => {
-          let (head, body) = clause_parts(t)
-          e.session.db.add_clause(head, body)
-          Succeed
-        }
-        _ => Fail
-      }
+    "let/1": (args, e) => {
+      guard args is [t] else { Fail }
+      let (head, body) = clause_parts(t)
+      e.session.db.add_clause(head, body)
+      Succeed
     },
-    "del/1": (g, e) => {
+    "del/1": (args, e) => {
       // 删除谓词指示符 `Name/Arity` 对应的全部子句（如 `del foo/2.`）
-      match g {
-        Compound(_, [t]) =>
-          match walk_deep(t, @hashmap.HashMap::new()) {
-            Compound("/", [Atom(name), Int(arity)]) =>
-              if arity >= 0 && e.session.db.remove_predicate(name, arity) {
-                Succeed
-              } else {
-                Fail
-              }
-            _ => Fail
+      guard args is [t] else { Fail }
+      match walk_deep(t, @hashmap.HashMap::new()) {
+        Compound("/", [Atom(name), Int(arity)]) =>
+          if arity >= 0 && e.session.db.remove_predicate(name, arity) {
+            Succeed
+          } else {
+            Fail
           }
         _ => Fail
       }
     },
-    "cls/0": (_g, e) => {
+    "cls/0": (_args, _e) => {
       // ANSI 清屏 + 光标归位（写入会话输出缓冲，REPL drain 时输出）。
       // 设置 quiet 标志，REPL 据此不显示 `true.`
-      e.session.output.write_string("\u{1b}[2J\u{1b}[H")
-      e.session.quiet = true
+      _e.session.output.write_string("\u{1b}[2J\u{1b}[H")
+      _e.session.quiet = true
       Succeed
     },
-    "halt/0": (_g, e) => {
+    "halt/0": (_args, _e) => {
       // 请求退出（REPL 检查 Session::halt_requested）
-      e.session.halt = true
+      _e.session.halt = true
       Succeed
     },
-    "consult/1": (g, e) => {
-      match g {
-        Compound(_, [t]) =>
-          match walk(t, e.env) {
-            Atom(name) => consult_load(e, name)
-            _ => Fail
-          }
+    "consult/1": (args, e) => {
+      guard args is [t] else { Fail }
+      match walk(t, e.env) {
+        Atom(name) => consult_load(e, name)
         _ => Fail
       }
     },
@@ -504,9 +424,13 @@ fn clause_parts(t : Term) -> (Term, Array[Term]) {
 
 ///|
 /// 算术比较内建（=:= =\= < > =< >=）
-fn arith_cmp(g : Term, e : Engine, cmp : (Int, Int) -> Bool) -> BuiltinResult {
-  match g {
-    Compound(_, [a, b]) => {
+fn arith_cmp(
+  args : Array[Term],
+  e : Engine,
+  cmp : (Int, Int) -> Bool,
+) -> BuiltinResult {
+  match args {
+    [a, b] => {
       let result = try {
         let x = eval_arith(a, e.env)
         let y = eval_arith(b, e.env)
@@ -527,11 +451,16 @@ fn arith_cmp(g : Term, e : Engine, cmp : (Int, Int) -> Bool) -> BuiltinResult {
 }
 
 ///|
-/// 查找内建谓词：命中返回实现，未命中返回 None（走用户子句）
+/// 查找内建谓词：命中返回实现，未命中返回 None（走用户子句）。
+/// Compound 解包统一在此完成，实现只接收参数数组。
 fn exec_builtin(g : Term, e : Engine) -> BuiltinResult? {
   let key = pred_key(g)
   match builtin_table().get(key) {
-    Some(f) => Some(f(g, e))
+    Some(f) =>
+      match g {
+        Compound(_, args) => Some(f(args, e))
+        _ => Some(f([], e))
+      }
     None => None
   }
 }
