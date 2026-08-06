@@ -229,3 +229,26 @@ test "unbound predicate fails" {
   @love.answers_string(session, "?- unknown_predicate(x).", out)
   |> inspect(content="false")
 }
+
+///|
+test "let and del builtins" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  // 断言事实
+  @love.answers_string(session, "?- let parent(tom, bob).", out)
+  |> inspect(content="true")
+  // 断言规则：let 优先级高于 :-，无需括号
+  @love.answers_string(session, "?- let parent(bob, ann) :- true.", out)
+  |> inspect(content="true")
+  // 查询断言结果
+  @love.answers_string(session, "?- parent(tom, X).", out)
+  |> inspect(content="X = bob")
+  // 删除后查询失败
+  @love.answers_string(session, "?- del parent(tom, bob).", out)
+  |> inspect(content="true")
+  @love.answers_string(session, "?- parent(tom, X).", out)
+  |> inspect(content="false")
+  // 删除不存在的子句失败
+  @love.answers_string(session, "?- del parent(x, y).", out)
+  |> inspect(content="false")
+}

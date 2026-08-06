@@ -64,6 +64,7 @@ type Database
 pub fn Database::add_clause(Self, Term, Array[Term]) -> Unit
 pub fn Database::lookup(Self, String) -> Array[Int]
 pub fn Database::new() -> Self
+pub fn Database::retract(Self, Term, Array[Term]) -> Bool
 
 type Engine
 pub fn Engine::new(Session, Array[Term], @hashmap.HashMap[String, Term]) -> Self

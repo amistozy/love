@@ -402,8 +402,41 @@ fn builtin_table() -> Map[String, (Term, Engine) -> BuiltinResult] {
         _ => Fail
       }
     },
+    "let/1": (g, e) => {
+      match g {
+        Compound(_, [t]) => {
+          let (head, body) = clause_parts(t)
+          e.session.db.add_clause(head, body)
+          Succeed
+        }
+        _ => Fail
+      }
+    },
+    "del/1": (g, e) => {
+      match g {
+        Compound(_, [t]) => {
+          let (head, body) = clause_parts(t)
+          if e.session.db.retract(head, body) {
+            Succeed
+          } else {
+            Fail
+          }
+        }
+        _ => Fail
+      }
+    },
   }
   table
+}
+
+///|
+/// 拆分 `(Head :- Body)` 或普通项为 (head, body 目标列表)。
+/// 用于 `add`/`del` 内建（对应标准 Prolog 的 assert/retract）。
+fn clause_parts(t : Term) -> (Term, Array[Term]) {
+  match walk_deep(t, @hashmap.HashMap::new()) {
+    Compound(":-", [h, b]) => (h, flatten(b))
+    other => (other, [])
+  }
 }
 
 ///|

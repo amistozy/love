@@ -30,7 +30,8 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 ### 运算符（优先级数字越大越松散）
 
 ```
-1200 xfx  :-         1100 xfy  ;        1000 xfy  ,
+1200 xfx  :-         1300 fy   let del
+1100 xfy  ;          1000 xfy  ,
  900 fy   \+ not      700 xfx  = \= == \== < > =< >= =:= =\= is
  500 yfx  + -         400 yfx  * / // mod
  200 fy   -
@@ -52,6 +53,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 - 算术：`is/2`、`=:=/2`、`=\=/2`、`</2`、`>/2`、`=</2`、`>=/2`
 - 列表：`member/2`、`length/2`（双向）、`append/3`
 - 元编程：`findall/3`
+- 动态数据库：`let/1`、`del/1`（前缀运算符，对应 `assert`/`retract`）
 - 输出（写入会话缓冲）：`write/1`、`writeln/1`、`nl/0`
 - 字符串：`atom_length/2`、`char_code/2`
 
@@ -81,18 +83,19 @@ moon run --target native cmd/main   # 启动 REPL
 
 REPL 采用 SWI-Prolog 风格的顶层交互：提示符 `?- ` 后**直接输入查询目标**
 （无需再写 `?-`），答案后输入 `;` 看下一个解、`.` 或回车结束、无更多解时
-打印 `false.`；用 `:- head.` / `:- head :- body.` 前缀向数据库断言子句；
-`halt.` 退出。
+打印 `false.`；用 `let` / `del` 前缀运算符断言或删除子句（对应标准 Prolog
+的 `assert`/`retract`）；`halt.` 退出。
 
 ```prolog
-?- member(X, [1, 2, 3]).
-X = 1 ;
-X = 2 ;
-X = 3 .
-?- :- parent(tom, bob).      % 断言事实
+?- let parent(tom, bob).         % 断言事实
 true.
-?- parent(tom, X).
-X = bob .
+?- let grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 断言规则（无需括号，let 优先级高于 :-）
+true.
+?- grandparent(tom, Who).
+Who = ann ;
+false.
+?- del parent(tom, bob).         % 删除子句
+true.
 ```
 
 ## 代码组织（参考 Scryer Prolog 的结构）

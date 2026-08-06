@@ -2,7 +2,7 @@
 /// Love REPL：交互式解释器入口。
 ///
 /// - 提示符 `?- ` 后直接输入查询目标，如 `member(X, [1, 2, 3]).`
-/// - 用 `:- head.` / `:- head :- body.` 前缀向数据库断言子句
+/// - 用 `let Head.` / `let Head :- Body.` 断言子句，`del` 删除
 /// - 查询答案后输入 `;` 查看下一个解，`.` 或回车结束
 /// - 输入 `halt.` 退出
 async fn main {
@@ -12,7 +12,8 @@ async fn main {
     "Love 1.0 - a little Prolog. Enter a query directly (end with '.').\n",
   )
   @stdio.stdout.write("  query:   member(X, [1, 2, 3]).\n")
-  @stdio.stdout.write("  define:  :- parent(tom, bob).\n")
+  @stdio.stdout.write("  define:  let parent(tom, bob).\n")
+  @stdio.stdout.write("  remove:  del parent(tom, bob).\n")
   @stdio.stdout.write("  quit:    halt.\n")
   for ;; {
     @stdio.stdout.write("?- ")
@@ -28,16 +29,8 @@ async fn main {
         if t == "halt." {
           break
         }
-        // 断言与查询都可能抛出 LoveError，统一在此捕获
-        try {
-          if t.has_prefix(":-") {
-            // `:- head.` 形式：断言子句
-            assert_clause(session, t[2:].trim().to_owned())
-          } else {
-            // 默认顶层输入即查询（`?- ` 前缀也会被 parse_query_text 接受）
-            run_query(session, t)
-          }
-        } catch {
+        // 查询（含 add/del 内建）可能抛出 LoveError，统一在此捕获
+        try run_query(session, t) catch {
           @love.LoveError::Msg(m) => @stdio.stdout.write("error: \{m}\n")
           _ => @stdio.stdout.write("error: unexpected failure\n")
         } noraise {
@@ -46,13 +39,6 @@ async fn main {
       }
     }
   }
-}
-
-///|
-/// 断言子句到数据库（错误向上传播，由 main 统一处理）
-async fn assert_clause(session : @love.Session, src : String) -> Unit {
-  @love.assert_text(session, src)
-  @stdio.stdout.write("true.\n")
 }
 
 ///|
@@ -82,8 +68,10 @@ async fn run_query(session : @love.Session, src : String) -> Unit {
         )
         shown = shown + 1
       }
+      // 无绑定变量的解（如 add/del 断言成功）：`true.` 直接结束，不等待后缀
       if shown == 0 {
-        @stdio.stdout.write("true")
+        @stdio.stdout.write("true.\n")
+        break
       }
       // 留一个空格，等待用户输入 `;` 或 `.`。
       // 用户按回车后终端已回显换行，程序不再输出换行（避免空行）。

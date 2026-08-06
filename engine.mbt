@@ -11,7 +11,7 @@ pub struct Clause {
 /// 内部表示（子句列表与索引）完全隐藏。
 struct Database {
   clauses : Array[Clause]
-  index : Map[String, Array[Int]]
+  mut index : Map[String, Array[Int]]
 }
 
 ///|
@@ -52,6 +52,45 @@ pub fn Database::lookup(self : Database, key : String) -> Array[Int] {
     Some(arr) => arr
     None => []
   }
+}
+
+///|
+/// 删除第一个与 `head`/`body` 合一的子句（`del` 内建）。
+/// 找到并删除后重建索引；找不到返回 `false`。
+pub fn Database::retract(
+  self : Database,
+  head : Term,
+  body : Array[Term],
+) -> Bool {
+  for i in 0..<self.clauses.length() {
+    let c = self.clauses[i]
+    match unify(head, c.head, @hashmap.HashMap::new()) {
+      None => continue
+      Some(env) =>
+        if body.length() == c.body.length() {
+          let mut ok = true
+          for j in 0..<body.length() {
+            if unify(body[j], c.body[j], env) is None {
+              ok = false
+              break
+            }
+          }
+          if ok {
+            let _ = self.clauses.remove(i)
+            self.index = {}
+            for k in 0..<self.clauses.length() {
+              let key = pred_key(self.clauses[k].head)
+              match self.index.get(key) {
+                Some(arr) => arr.push(k)
+                None => self.index[key] = [k]
+              }
+            }
+            return true
+          }
+        }
+    }
+  }
+  false
 }
 
 ///|
