@@ -53,7 +53,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 - 算术：`is/2`、`=:=/2`、`=\=/2`、`</2`、`>/2`、`=</2`、`>=/2`
 - 列表：`member/2`、`length/2`（双向）、`append/3`
 - 元编程：`findall/3`
-- 动态数据库：`let/1`、`del/1`（前缀运算符，对应 `assert`/`retract`）
+- 动态数据库：`let/1`（断言，对应 `assert`）、`del/1`（按谓词指示符 `Name/Arity` 删除全部子句）
 - 会话控制：`cls/0`（清屏）、`halt/0`（退出 REPL）、`consult/1`（加载 `name.love`，`[name].` 为其语法糖）
 - 输出（写入会话缓冲）：`write/1`、`writeln/1`、`nl/0`
 - 字符串：`atom_length/2`、`char_code/2`
@@ -85,7 +85,7 @@ moon run --target native cmd/main   # 启动 REPL
 REPL 采用 SWI-Prolog 风格的顶层交互：提示符 `?- ` 后**直接输入查询目标**
 （无需再写 `?-`），答案后输入 `;` 看下一个解、`.` 或回车结束、无更多解时
 打印 `false.`。`let` / `del` / `cls` / `halt` / `consult` 都是内建谓词：
-`let`/`del` 断言或删除子句（对应 `assert`/`retract`），`cls.` 清屏，
+`let` 断言子句（对应 `assert`），`del foo/2.` 删除谓词 `foo/2` 的全部子句，`cls.` 清屏，
 `halt.` 退出，`consult(family).` 或 `[family].` 导入 `family.love`。
 
 ```prolog
@@ -100,7 +100,7 @@ Who = ann ;
 false.
 ?- cls.                          % 清屏
 true.
-?- del parent(tom, bob).         % 删除子句
+?- del parent/2.                  % 删除谓词 parent/2 的全部子句
 true.
 ?- halt.                         % 退出
 ```

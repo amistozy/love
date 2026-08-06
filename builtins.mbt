@@ -413,15 +413,18 @@ fn builtin_table() -> Map[String, (Term, Engine) -> BuiltinResult] {
       }
     },
     "del/1": (g, e) => {
+      // 删除谓词指示符 `Name/Arity` 对应的全部子句（如 `del foo/2.`）
       match g {
-        Compound(_, [t]) => {
-          let (head, body) = clause_parts(t)
-          if e.session.db.retract(head, body) {
-            Succeed
-          } else {
-            Fail
+        Compound(_, [t]) =>
+          match walk_deep(t, @hashmap.HashMap::new()) {
+            Compound("/", [Atom(name), Int(arity)]) =>
+              if arity >= 0 && e.session.db.remove_predicate(name, arity) {
+                Succeed
+              } else {
+                Fail
+              }
+            _ => Fail
           }
-        }
         _ => Fail
       }
     },
@@ -491,7 +494,7 @@ fn load_program_safe(db : Database, src : String) -> Bool {
 
 ///|
 /// 拆分 `(Head :- Body)` 或普通项为 (head, body 目标列表)。
-/// 用于 `add`/`del` 内建（对应标准 Prolog 的 assert/retract）。
+/// 用于 `let` 内建（对应标准 Prolog 的 assert）。
 fn clause_parts(t : Term) -> (Term, Array[Term]) {
   match walk_deep(t, @hashmap.HashMap::new()) {
     Compound(":-", [h, b]) => (h, flatten(b))

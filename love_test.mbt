@@ -243,12 +243,15 @@ test "let and del builtins" {
   // 查询断言结果
   @love.answers_string(session, "?- parent(tom, X).", out)
   |> inspect(content="X = bob")
-  // 删除后查询失败
-  @love.answers_string(session, "?- del parent(tom, bob).", out)
+  // 按谓词指示符删除全部子句
+  @love.answers_string(session, "?- del parent/2.", out)
   |> inspect(content="true")
   @love.answers_string(session, "?- parent(tom, X).", out)
   |> inspect(content="false")
-  // 删除不存在的子句失败
+  // 删除不存在的谓词失败
+  @love.answers_string(session, "?- del nope/3.", out)
+  |> inspect(content="false")
+  // 非谓词指示符参数失败
   @love.answers_string(session, "?- del parent(x, y).", out)
   |> inspect(content="false")
 }

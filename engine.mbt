@@ -55,42 +55,36 @@ pub fn Database::lookup(self : Database, key : String) -> Array[Int] {
 }
 
 ///|
-/// 删除第一个与 `head`/`body` 合一的子句（`del` 内建）。
-/// 找到并删除后重建索引；找不到返回 `false`。
-pub fn Database::retract(
+/// 删除指定谓词（`name/arity`）的全部子句，重建索引。
+/// 至少删除一个时返回 `true`。
+pub fn Database::remove_predicate(
   self : Database,
-  head : Term,
-  body : Array[Term],
+  name : String,
+  arity : Int,
 ) -> Bool {
-  for i in 0..<self.clauses.length() {
-    let c = self.clauses[i]
-    match unify(head, c.head, @hashmap.HashMap::new()) {
-      None => continue
-      Some(env) =>
-        if body.length() == c.body.length() {
-          let mut ok = true
-          for j in 0..<body.length() {
-            if unify(body[j], c.body[j], env) is None {
-              ok = false
-              break
-            }
-          }
-          if ok {
-            let _ = self.clauses.remove(i)
-            self.index = {}
-            for k in 0..<self.clauses.length() {
-              let key = pred_key(self.clauses[k].head)
-              match self.index.get(key) {
-                Some(arr) => arr.push(k)
-                None => self.index[key] = [k]
-              }
-            }
-            return true
-          }
-        }
+  let key = "\{name}/\{arity}"
+  let mut removed = false
+  // 从后往前删，避免索引错位
+  let mut i = self.clauses.length() - 1
+  while i >= 0 {
+    if pred_key(self.clauses[i].head) == key {
+      let _ = self.clauses.remove(i)
+      removed = true
+    }
+    i = i - 1
+  }
+  if removed {
+    // 重建索引
+    self.index = {}
+    for k in 0..<self.clauses.length() {
+      let key = pred_key(self.clauses[k].head)
+      match self.index.get(key) {
+        Some(arr) => arr.push(k)
+        None => self.index[key] = [k]
+      }
     }
   }
-  false
+  removed
 }
 
 ///|
