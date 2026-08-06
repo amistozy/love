@@ -30,7 +30,7 @@ pub fn load_program(db : Database, src : String) -> Database raise LoveError {
 /// 从查询文本创建求解引擎
 pub fn query(session : Session, query_text : String) -> Engine raise LoveError {
   let goals = parse_query_text(query_text)
-  Engine::new(session, goals, {})
+  Engine::new(session, goals, @hashmap.HashMap::new())
 }
 
 ///|
@@ -38,6 +38,16 @@ pub fn query(session : Session, query_text : String) -> Engine raise LoveError {
 pub fn assert_text(session : Session, src : String) -> Unit raise LoveError {
   let clause = parse_clause_text(src)
   session.db.add_clause(clause.head, clause.body)
+}
+
+///|
+/// 收集引擎查询中的顶层变量名（按出现顺序，去重）
+pub fn engine_vars(e : Engine) -> Array[String] {
+  let vars = []
+  for g in e.goals {
+    collect_vars(g, vars)
+  }
+  vars
 }
 
 ///|

@@ -4,7 +4,8 @@ Love 是一个逻辑编程（logic programming）语言，语法与语义遵循 
 模型：程序由**子句**（事实与规则）构成，查询通过**合一**与**带回溯的 SLD 解析**
 求解。实现参考了 [Scryer Prolog](https://github.com/mthom/scryer-prolog)
 （WAM 架构）的设计，但针对教学场景做了大幅简化：直接以项结构递归合一，
-用显式选择点栈实现回溯，copy-on-write 环境省去 trail。
+用显式选择点栈实现回溯；环境采用**持久化不可变 HashMap**
+（`moonbitlang/core/immut/hashmap`），绑定返回结构共享的新环境，省去 trail。
 
 ## 语言概览
 
@@ -37,7 +38,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 
 ## 语义
 
-- **合一**：copy-on-write 环境 + occurs check（`X = f(X)` 失败）。
+- **合一**：持久化不可变 HashMap + occurs check（`X = f(X)` 失败）。
 - **SLD 解析**：深度优先、最左目标、按子句书写顺序尝试；显式选择点栈支持
   逐解产出（`next_solution`）与无限程序（`length(L, N)` 逐解枚举）。
 - **cut（`!`）**：截断选择点栈到当前子句进入时的高度，剪除替代分支。
@@ -78,8 +79,21 @@ moon test              # 运行全部测试
 moon run --target native cmd/main   # 启动 REPL
 ```
 
-REPL 中输入 `?- goal.` 查询，`fact.` / `rule :- body.` 断言子句，`halt.` 退出；
-答案后输入 `;` 查看下一个解。
+REPL 采用 SWI-Prolog 风格的顶层交互：提示符 `?- ` 后**直接输入查询目标**
+（无需再写 `?-`），答案后输入 `;` 看下一个解、`.` 或回车结束、无更多解时
+打印 `false.`；用 `:- head.` / `:- head :- body.` 前缀向数据库断言子句；
+`halt.` 退出。
+
+```prolog
+?- member(X, [1, 2, 3]).
+X = 1 ;
+X = 2 ;
+X = 3 .
+?- :- parent(tom, bob).      % 断言事实
+true.
+?- parent(tom, X).
+X = bob .
+```
 
 ## 代码组织（参考 Scryer Prolog 的结构）
 
@@ -89,12 +103,12 @@ REPL 中输入 `?- goal.` 查询，`fact.` / `rule :- body.` 断言子句，`hal
 | `token.mbt` / `lexer.mbt` | 词法分析 |
 | `term.mbt` | 项表示、展示（列表/运算符/引号规则） |
 | `parser.mbt` | 递归下降 + 优先级爬升 |
-| `unify.mbt` | 合一（copy-on-write + occurs check） |
+| `unify.mbt` | 合一（持久化 HashMap + occurs check） |
 | `engine.mbt` | 数据库、会话、选择点栈求解引擎 |
 | `builtins.mbt` | 内建谓词（member/length/append 用伪子句展开实现双向性） |
 | `api.mbt` | 顶层 API（`program_from_text`、`answers_string`） |
 | `cmd/main/` | 交互式 REPL（native + async stdio） |
 
 与 Scryer Prolog 的对应关系：Scryer 用 heap/trail/寄存器堆的 WAM 实现，
-Love 用选择点栈 + copy-on-write 环境；Scryer 的 `parser.rs` 用操作数栈规约，
+Love 用选择点栈 + 持久化不可变 HashMap；Scryer 的 `parser.rs` 用操作数栈规约，
 Love 用优先级爬升。两者都遵循 ISO Prolog 的运算符约束（`xfx`/`xfy`/`yfx`）。

@@ -6,8 +6,10 @@ pub struct Clause {
 }
 
 ///|
-/// 谓词数据库：子句序列 + (name/arity) 索引
-pub struct Database {
+/// 谓词数据库：子句序列 + (name/arity) 索引。
+/// 抽象类型：外部只能通过 `new`/`add_clause`/`lookup` 等公开方法交互，
+/// 内部表示（子句列表与索引）完全隐藏。
+struct Database {
   clauses : Array[Clause]
   index : Map[String, Array[Int]]
 }
@@ -55,7 +57,8 @@ pub fn Database::lookup(self : Database, key : String) -> Array[Int] {
 ///|
 /// 会话：数据库、变量重命名计数器、输出缓冲（write 内建写入）。
 /// 嵌套求解（findall / \+）共享会话，因此输出与命名保持一致。
-pub struct Session {
+/// 抽象类型：外部通过 `new`/`drain_output` 等公开方法交互。
+struct Session {
   db : Database
   counter : Ref[Int]
   output : StringBuilder
@@ -84,15 +87,14 @@ fn fresh_var_name(e : Engine, prefix : String) -> String {
 ///|
 /// 候选：数据库子句，或内联展开（`;` 析取、member/length/append 的展开子句）。
 /// 仅作为 ChoicePoint 的内部字段类型使用。
-#warnings("-missing_priv")
-enum Candidate {
+priv enum Candidate {
   Db(Int)
   Inline(Array[(Term, Term)], Array[Term])
 }
 
 ///|
 /// 选择点：记录回溯时恢复的状态
-struct ChoicePoint {
+priv struct ChoicePoint {
   goals : Array[Term]
   env : Env
   candidates : Array[Candidate]
@@ -104,8 +106,10 @@ struct ChoicePoint {
 }
 
 ///|
-/// 求解引擎：当前目标列表 + 环境 + 选择点栈
-pub struct Engine {
+/// 求解引擎：当前目标列表 + 环境 + 选择点栈。
+/// 抽象类型：外部通过 `new`/`next_solution` 等公开方法交互，
+/// 求解状态（目标、环境、选择点栈）完全隐藏。
+struct Engine {
   session : Session
   mut goals : Array[Term]
   mut env : Env
@@ -123,26 +127,44 @@ pub fn Engine::new(session : Session, goals : Array[Term], env : Env) -> Engine 
 ///|
 /// 子句实例化：重命名其中的变量为全新变量
 fn rename_clause(e : Engine, clause : Clause) -> (Term, Array[Term]) {
-  let map : Map[String, String] = Map([])
-  let head = rename_term(e, clause.head, map)
-  let body = clause.body.map(t => rename_term(e, t, map))
+  let (head, map) = rename_term(e, clause.head, @hashmap.HashMap::new())
+  let body = []
+  let mut m = map
+  for t in clause.body {
+    let (nt, m2) = rename_term(e, t, m)
+    body.push(nt)
+    m = m2
+  }
   (head, body)
 }
 
 ///|
-fn rename_term(e : Engine, t : Term, map : Map[String, String]) -> Term {
+/// 重命名项中的变量，返回 (新项, 更新后的重命名表)
+fn rename_term(
+  e : Engine,
+  t : Term,
+  map : @hashmap.HashMap[String, String],
+) -> (Term, @hashmap.HashMap[String, String]) {
   match t {
     Var(name) =>
       match map.get(name) {
-        Some(new) => Var(new)
+        Some(new) => (Var(new), map)
         None => {
           let new = fresh_var_name(e, name)
-          map[name] = new
-          Var(new)
+          (Var(new), map.add(name, new))
         }
       }
-    Compound(f, args) => Compound(f, args.map(a => rename_term(e, a, map)))
-    _ => t
+    Compound(f, args) => {
+      let new_args = []
+      let mut m = map
+      for a in args {
+        let (na, m2) = rename_term(e, a, m)
+        new_args.push(na)
+        m = m2
+      }
+      (Compound(f, new_args), m)
+    }
+    _ => (t, map)
   }
 }
 

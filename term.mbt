@@ -14,9 +14,9 @@ pub(all) enum Term {
 
 ///|
 /// 环境（substitution）：变量名 -> 项的映射。
-/// 采用 copy-on-write：每次合一产生新环境，回溯分支天然相互独立，
-/// 因此引擎无需 trail。
-pub type Env = Map[String, Term]
+/// 采用**持久化不可变 HashMap**（`@immut/hashmap`）：每次绑定返回新环境，
+/// 结构共享、回溯分支天然相互独立，因此引擎无需 trail。
+pub type Env = @hashmap.HashMap[String, Term]
 
 ///|
 /// 收集项中出现的变量名（去重，保持出现顺序）
@@ -250,14 +250,14 @@ pub fn term_to_string_plain(t : Term, env : Env) -> String {
 /// 写出一个子句：`Head :- Body.` 或 `Head.`（不展开变量，用于调试）
 pub fn clause_to_string(head : Term, body : Array[Term]) -> String {
   let sb = StringBuilder()
-  write_term(head, {}, sb, 1200, true)
+  write_term(head, @hashmap.HashMap::new(), sb, 1200, true)
   if body.length() > 0 {
     sb.write_string(" :- ")
     for i in 0..<body.length() {
       if i > 0 {
         sb.write_string(", ")
       }
-      write_term(body[i], {}, sb, 1000, true)
+      write_term(body[i], @hashmap.HashMap::new(), sb, 1000, true)
     }
   }
   sb.write_string(".")

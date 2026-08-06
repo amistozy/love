@@ -5,6 +5,14 @@ pub(all) suberror LoveError {
 }
 
 ///|
+/// 取错误消息
+pub fn LoveError::message(self : LoveError) -> String {
+  match self {
+    LoveError::Msg(m) => m
+  }
+}
+
+///|
 /// 构造一个 LoveError
 fn love_error(msg : String) -> LoveError {
   LoveError::Msg(msg)

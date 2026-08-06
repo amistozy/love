@@ -8,7 +8,7 @@
 /// - `xfy` 右结合：左侧严格低于，右侧可等于
 /// - `yfx` 左结合：右侧严格低于，左侧可等于
 /// - `fx` / `fy` 前缀：`fx` 参数严格低于，`fy` 参数可等于
-pub enum Assoc {
+priv enum Assoc {
   Xfx
   Xfy
   Yfx

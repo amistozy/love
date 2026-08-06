@@ -42,30 +42,16 @@ fn occurs(name : String, t : Term, env : Env) -> Bool {
 ///|
 /// 合一：在环境 `env` 下合一 `t1` 与 `t2`。
 ///
-/// 采用 copy-on-write：绑定变量时复制环境，返回新环境；
+/// 采用**持久化不可变 HashMap**：绑定变量时 `add` 返回新环境（结构共享），
 /// 失败返回 `None`。合一带 occurs check，避免产生循环项。
 pub fn unify(t1 : Term, t2 : Term, env : Env) -> Env? {
   let a = walk(t1, env)
   let b = walk(t2, env)
   match a {
-    Var(n) =>
-      if occurs(n, b, env) {
-        None
-      } else {
-        let new_env = env.copy()
-        new_env[n] = b
-        Some(new_env)
-      }
+    Var(n) => if occurs(n, b, env) { None } else { Some(env.add(n, b)) }
     _ =>
       match b {
-        Var(n) =>
-          if occurs(n, a, env) {
-            None
-          } else {
-            let new_env = env.copy()
-            new_env[n] = a
-            Some(new_env)
-          }
+        Var(n) => if occurs(n, a, env) { None } else { Some(env.add(n, a)) }
         _ =>
           match (a, b) {
             (Int(x), Int(y)) => if x == y { Some(env) } else { None }
