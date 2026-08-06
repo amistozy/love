@@ -252,3 +252,31 @@ test "let and del builtins" {
   @love.answers_string(session, "?- del parent(x, y).", out)
   |> inspect(content="false")
 }
+
+///|
+test "cls halt consult builtins" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  // cls/0：把 ANSI 清屏序列写入输出缓冲
+  @love.answers_string(session, "?- cls.", out) |> inspect(content="true")
+  out.to_string() |> inspect(content="\u{1b}[2J\u{1b}[H")
+  // halt/0：请求退出（不真正终止测试）
+  @love.answers_string(session, "?- halt.", out) |> inspect(content="true")
+  session.halt_requested() |> inspect(content="true")
+  // consult/1：读取 `.love` 文件并加载子句
+  let _ = @fs.write_string_to_file("love_consult_test.love", "p(a). p(b).")
+  @love.answers_string(session, "?- consult(love_consult_test).", out)
+  |> inspect(content="true")
+  @love.answers_string(session, "?- p(X).", out)
+  |> inspect(content="X = a; X = b")
+  // 语法错误的文件 → consult 失败
+  let _ = @fs.write_string_to_file("love_consult_bad.love", "broken(")
+  @love.answers_string(session, "?- consult(love_consult_bad).", out)
+  |> inspect(content="false")
+  // 文件不存在 → consult 失败
+  @love.answers_string(session, "?- consult(no_such_file_xyz).", out)
+  |> inspect(content="false")
+  // 清理临时文件
+  let _ = @fs.remove_file("love_consult_test.love")
+  let _ = @fs.remove_file("love_consult_bad.love")
+}

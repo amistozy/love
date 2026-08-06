@@ -27,6 +27,12 @@ pub fn load_program(db : Database, src : String) -> Database raise LoveError {
 }
 
 ///|
+/// 把程序文本加载进会话的数据库（`[file].` 导入用）
+pub fn load_text(session : Session, src : String) -> Unit raise LoveError {
+  let _ = load_program(session.db, src)
+}
+
+///|
 /// 从查询文本创建求解引擎
 pub fn query(session : Session, query_text : String) -> Engine raise LoveError {
   let goals = parse_query_text(query_text)

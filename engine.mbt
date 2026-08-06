@@ -96,16 +96,23 @@ pub fn Database::retract(
 ///|
 /// 会话：数据库、变量重命名计数器、输出缓冲（write 内建写入）。
 /// 嵌套求解（findall / \+）共享会话，因此输出与命名保持一致。
-/// 抽象类型：外部通过 `new`/`drain_output` 等公开方法交互。
+/// 抽象类型：外部通过 `new`/`drain_output`/`halt_requested` 等公开方法交互。
 struct Session {
   db : Database
   counter : Ref[Int]
   output : StringBuilder
+  mut halt : Bool
 }
 
 ///|
 pub fn Session::new(db : Database) -> Session {
-  { db, counter: Ref(0), output: StringBuilder() }
+  { db, counter: Ref(0), output: StringBuilder(), halt: false }
+}
+
+///|
+/// `halt` 谓词是否已请求退出（REPL 据此结束循环）
+pub fn Session::halt_requested(self : Session) -> Bool {
+  self.halt
 }
 
 ///|

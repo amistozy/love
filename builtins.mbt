@@ -425,8 +425,66 @@ fn builtin_table() -> Map[String, (Term, Engine) -> BuiltinResult] {
         _ => Fail
       }
     },
+    "cls/0": (_g, e) => {
+      // ANSI 清屏 + 光标归位（写入会话输出缓冲，REPL drain 时输出）
+      e.session.output.write_string("\u{1b}[2J\u{1b}[H")
+      Succeed
+    },
+    "halt/0": (_g, e) => {
+      // 请求退出（REPL 检查 Session::halt_requested）
+      e.session.halt = true
+      Succeed
+    },
+    "consult/1": (g, e) => {
+      match g {
+        Compound(_, [t]) =>
+          match walk(t, e.env) {
+            Atom(name) => consult_load(e, name)
+            _ => Fail
+          }
+        _ => Fail
+      }
+    },
   }
   table
+}
+
+///|
+/// `consult/1` 的实现：读取 `name.love` 并把子句加载进数据库
+fn consult_load(e : Engine, name : String) -> BuiltinResult {
+  let path = name + ".love"
+  match read_file_safe(path) {
+    Some(content) =>
+      if load_program_safe(e.session.db, content) {
+        Succeed
+      } else {
+        Fail
+      }
+    None => Fail
+  }
+}
+
+///|
+/// 读取文件，失败返回 `None`（文件不存在等）
+fn read_file_safe(path : String) -> String? {
+  try Some(@fs.read_file_to_string(path)) catch {
+    _ => None
+  } noraise {
+    s => s
+  }
+}
+
+///|
+/// 解析并加载程序文本，失败返回 `false`（语法错误等）
+fn load_program_safe(db : Database, src : String) -> Bool {
+  try {
+    let _ = load_program(db, src)
+    true
+  } catch {
+    _ => false
+  } noraise {
+    r => r
+  }
 }
 
 ///|
