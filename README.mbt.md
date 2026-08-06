@@ -2,10 +2,9 @@
 
 Love 是一个逻辑编程（logic programming）语言，语法与语义遵循 Prolog 的核心
 模型：程序由**子句**（事实与规则）构成，查询通过**合一**与**带回溯的 SLD 解析**
-求解。实现参考了 [Scryer Prolog](https://github.com/mthom/scryer-prolog)
-（WAM 架构）的设计，但针对教学场景做了大幅简化：直接以项结构递归合一，
-用显式选择点栈实现回溯；环境采用**持久化不可变 HashMap**
-（`moonbitlang/core/immut/hashmap`），绑定返回结构共享的新环境，省去 trail。
+求解。实现针对教学场景做了简化：直接以项结构递归合一，用显式选择点栈实现
+回溯；环境采用**持久化不可变 HashMap**（`moonbitlang/core/immut/hashmap`），
+绑定返回结构共享的新环境，省去 trail。
 
 ## 快速开始
 
@@ -16,18 +15,20 @@ moon run --target native cmd/main   # 启动 REPL
 
 ## REPL
 
-提示符 `?- ` 后**直接输入查询目标**（无需再写 `?-`），采用 SWI-Prolog 风格的
-逐解交互：
+提示符 `?- ` 后直接输入查询目标，采用 SWI-Prolog 风格的逐解交互：
 
 ```prolog
 ?- member(X, [1, 2, 3]).
 X = 1 ;
 X = 2 ;
-X = 3 .          ← 预读（lookahead）发现无更多解，自动以 `.` 收尾
+X = 3.           ← 预读（lookahead）发现无更多解，自动以句号收尾
 
 ?- X = 1.
 X = 1.           ← 单解直接结束，无需输入分号/句号
 ```
+
+**句号规则**：程序自动收尾的句号前**没有空格**（`X = 3.`）；用户手动输入的
+句号（终端回显）前才有空格（`X = 2 .`）。
 
 ### 交互约定
 
@@ -51,17 +52,16 @@ true.
 ?- [family].                                      % 导入 family.love
 true.
 ?- grandparent(tom, Who).
-Who = ann ;
-false.
+Who = ann.                                        % 单解，预读直接收尾
 ?- del parent/2.                                  % 删除谓词 parent/2 的全部子句
 true.
 ?- cls.                                           % 清屏（静默）
 ?- halt.                                          % 退出
 ```
 
-`[name].` 的处理参考了 Scryer `toplevel.pl` 的 `instruction_match`：读入的 term
-若为**单元素列表 `[Item]` 且 `Item` 是原子**，则转成 `consult(Item)` 查询；
-因此 `[X, Y] = [2, 3].`、`[X].` 等不会被误判，仍按普通查询求解。
+`[name].` 的判定在 term 层完成：读入的 term 为**单元素列表 `[Item]` 且
+`Item` 是原子**时转成 `consult(Item)` 查询；`[X, Y] = [2, 3].`、`[X].` 等
+不会被误判，仍按普通查询求解。
 
 ## 语言
 
@@ -159,7 +159,7 @@ p(3).
 
 错误通过 `LoveError` 抛出（`raise LoveError`）。
 
-## 代码组织（参考 Scryer Prolog 的结构）
+## 代码组织
 
 | 文件 | 职责 |
 |---|---|
@@ -172,12 +172,6 @@ p(3).
 | `builtins.mbt` | 内建谓词（member/length/append 用伪子句展开实现双向性） |
 | `api.mbt` | 顶层 API（`program_from_text`、`answers_string`） |
 | `cmd/main/` | 交互式 REPL（native + async stdio） |
-
-与 Scryer Prolog 的对应关系：Scryer 用 heap/trail/寄存器堆的 WAM 实现，
-Love 用选择点栈 + 持久化不可变 HashMap；Scryer 的 `parser.rs` 用操作数栈规约，
-Love 用优先级爬升；Scryer 的顶层（`toplevel.pl`）用 Prolog 自身写成并做
-`[Item].` 模式匹配，Love 的 REPL 也采用同样的 term 层匹配。两者都遵循
-ISO Prolog 的运算符约束（`xfx`/`xfy`/`yfx`）。
 
 ## 测试
 
