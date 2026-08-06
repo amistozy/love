@@ -75,58 +75,75 @@ async fn main {
 async fn run_query(session : @love.Session, src : String) -> Unit {
   let e = @love.query(session, src)
   let vars = @love.engine_vars(e)
+  // 预读（lookahead）：`pending` 保存当前解；显示前预先求下一个解，
+  // 若没有下一个解则当前解直接以 `.` 收尾，无需用户输入。
+  let mut pending = e.next_solution()
   for ;; {
-    let opt = e.next_solution()
-    if opt is Some(env) {
-      if session.halt_requested() {
-        // `halt.` 已请求退出：不显示解
+    match pending {
+      None => {
+        // 无解
+        @stdio.stdout.write(session.drain_output())
+        @stdio.stdout.write("false.\n")
         break
       }
-      @stdio.stdout.write(session.drain_output())
-      // 打印解：`X = 1`
-      let mut shown = 0
-      for i in 0..<vars.length() {
-        if @love.walk(Var(vars[i]), env) is Var(_) {
-          continue
+      Some(env) => {
+        if session.halt_requested() {
+          // `halt.` 已请求退出：不显示解
+          break
         }
-        if shown > 0 {
-          @stdio.stdout.write(", ")
-        }
-        @stdio.stdout.write("\{vars[i]} = ")
-        @stdio.stdout.write(
-          @love.term_to_string(@love.walk_deep(Var(vars[i]), env), env),
-        )
-        shown = shown + 1
-      }
-      // 无绑定变量的解（如 let/del 断言成功）：`true.` 直接结束，不等待后缀。
-      // 纯副作用谓词（如 cls）设置了 quiet：不显示 `true.`（标志由末尾 take_quiet 重置）
-      if shown == 0 {
+        // 先取走当前解的 write 输出，再预读下一个解（避免预读的副作用混入）
+        @stdio.stdout.write(session.drain_output())
+        let next = e.next_solution()
+        // 求解过程中执行了 `cls` 等纯副作用谓词（quiet）：静默，不显示任何解
         if session.quiet_requested() {
           break
         }
-        @stdio.stdout.write("true.\n")
-        break
-      }
-      // 留一个空格，等待用户输入 `;` 或 `.`。
-      // 用户按回车后终端已回显换行，程序不再输出换行（避免空行）。
-      @stdio.stdout.write(" ")
-      let more = @stdio.stdin.read_until("\n")
-      match more {
-        None => {
-          @stdio.stdout.write("\n")
-          break
+        // 打印解：`X = 1`
+        let mut shown = 0
+        for i in 0..<vars.length() {
+          if @love.walk(Var(vars[i]), env) is Var(_) {
+            continue
+          }
+          if shown > 0 {
+            @stdio.stdout.write(", ")
+          }
+          @stdio.stdout.write("\{vars[i]} = ")
+          @stdio.stdout.write(
+            @love.term_to_string(@love.walk_deep(Var(vars[i]), env), env),
+          )
+          shown = shown + 1
         }
-        Some(ans) => if ans.trim() == ";" { continue } else { break }
+        // 无绑定变量的解（如 let/del 断言成功、析取的 true 分支）：显示 `true`
+        if shown == 0 {
+          @stdio.stdout.write("true")
+        }
+        // 根据预读的 next 决定收尾：最后一个解直接 `.`，否则等待用户 `;`
+        match next {
+          None => {
+            // 当前是最后一个解：直接以 `.` 收尾（`true.` 或 `X = 1.`），无需用户输入
+            @stdio.stdout.write(".\n")
+            break
+          }
+          Some(_) => {
+            // 还有后续解：缓存并等待用户 `;` 继续、`.`/回车 结束
+            pending = next
+            @stdio.stdout.write(" ")
+            let more = @stdio.stdin.read_until("\n")
+            match more {
+              None => {
+                @stdio.stdout.write("\n")
+                break
+              }
+              Some(ans) => if ans.trim() == ";" { continue } else { break }
+            }
+          }
+        }
       }
-    } else {
-      // 无更多解（write 内建输出最后 flush）
-      @stdio.stdout.write(session.drain_output())
-      @stdio.stdout.write("false.\n")
-      break
     }
   }
-  // 查询结束：空行分隔下一个 `?- ` 提示符。
+  // 查询结束：丢弃预读（未显示）解的残留输出；空行分隔下一个 `?- ` 提示符。
   // 纯副作用谓词（如 cls）设置了 quiet：取走标志，不打印空行
+  let _ = session.drain_output()
   if !session.take_quiet() {
     @stdio.stdout.write("\n")
   }
