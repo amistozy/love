@@ -1,0 +1,116 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "amistozy/love"
+
+import {
+  "moonbitlang/core/ref",
+}
+
+// Values
+pub fn answers_string(Session, String, StringBuilder) -> String raise LoveError
+
+pub fn assert_text(Session, String) -> Unit raise LoveError
+
+pub fn clause_to_string(Term, Array[Term]) -> String
+
+pub fn collect_vars(Term, Array[String]) -> Unit
+
+pub fn is_ground(Term, Map[String, Term]) -> Bool
+
+pub fn lex(String) -> Array[Token] raise LoveError
+
+pub fn load_program(Database, String) -> Database raise LoveError
+
+pub fn parse_clause_text(String) -> Clause raise LoveError
+
+pub fn parse_program_text(String) -> Array[Clause] raise LoveError
+
+pub fn parse_query_text(String) -> Array[Term] raise LoveError
+
+pub fn program_from_text(String) -> Database raise LoveError
+
+pub fn query(Session, String) -> Engine raise LoveError
+
+pub fn solve_all(Engine) -> Array[Map[String, Term]]
+
+pub fn term_identical(Term, Term, Map[String, Term]) -> Bool
+
+pub fn term_to_string(Term, Map[String, Term]) -> String
+
+pub fn term_to_string_plain(Term, Map[String, Term]) -> String
+
+pub fn unify(Term, Term, Map[String, Term]) -> Map[String, Term]?
+
+pub fn walk(Term, Map[String, Term]) -> Term
+
+pub fn walk_deep(Term, Map[String, Term]) -> Term
+
+pub fn write_term(Term, Map[String, Term], StringBuilder, Int, Bool) -> Unit
+
+// Errors
+pub(all) suberror LoveError {
+  Msg(String)
+}
+
+// Types and methods
+pub enum Assoc {
+  Xfx
+  Xfy
+  Yfx
+  Fy
+}
+
+type Candidate
+
+type ChoicePoint
+
+pub struct Clause {
+  head : Term
+  body : Array[Term]
+}
+
+pub struct Database {
+  clauses : Array[Clause]
+  index : Map[String, Array[Int]]
+}
+pub fn Database::add_clause(Self, Term, Array[Term]) -> Unit
+pub fn Database::lookup(Self, String) -> Array[Int]
+pub fn Database::new() -> Self
+
+pub struct Engine {
+  session : Session
+  mut goals : Array[Term]
+  mut env : Map[String, Term]
+  stack : Array[ChoicePoint]
+  mut cut_marker : Int
+  mut exhausted : Bool
+}
+pub fn Engine::new(Session, Array[Term], Map[String, Term]) -> Self
+pub fn Engine::next_solution(Self) -> Map[String, Term]?
+
+pub struct Session {
+  db : Database
+  counter : @ref.Ref[Int]
+  output : StringBuilder
+}
+pub fn Session::drain_output(Self) -> String
+pub fn Session::new(Database) -> Self
+
+pub(all) enum Term {
+  Int(Int)
+  Atom(String)
+  Var(String)
+  Compound(String, Array[Term])
+}
+
+pub enum Token {
+  Name(String)
+  Quoted(String)
+  Int(Int)
+  Symbol(String)
+  Eof
+}
+
+// Type aliases
+pub type Env = Map[String, Term]
+
+// Traits

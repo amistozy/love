@@ -1,3 +1,231 @@
-// Blackbox tests run against the package's public API. Use `@love` to import.
-// Prefer high-level behaviors over implementation details.
-// Run `moon test` to execute and `moon test --update` to refresh snapshots.
+///|
+/// Love 解释器核心功能测试（黑盒，通过 @love 公共 API）
+test "parse program and query" {
+  let db = @love.program_from_text(
+    (
+      #|parent(tom, bob).
+      #|parent(bob, ann).
+      #|grandparent(X, Y) :- parent(X, Z), parent(Z, Y).
+      #|
+    ),
+  )
+  let session = @love.Session::new(db)
+  let out = StringBuilder()
+  @love.answers_string(session, "?- grandparent(tom, Who).", out)
+  |> inspect(content="Who = ann")
+}
+
+///|
+test "append generates all splits" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  @love.answers_string(session, "?- append(X, Y, [1, 2, 3]).", out)
+  |> inspect(
+    content="X = [], Y = [1, 2, 3]; X = [1], Y = [2, 3]; X = [1, 2], Y = [3]; X = [1, 2, 3], Y = []",
+  )
+}
+
+///|
+test "member enumerates solutions" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  @love.answers_string(session, "?- member(X, [a, b, c]).", out)
+  |> inspect(content="X = a; X = b; X = c")
+}
+
+///|
+test "length works both directions" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  @love.answers_string(session, "?- length([1, 2, 3], N).", out)
+  |> inspect(content="N = 3")
+  let out2 = StringBuilder()
+  @love.answers_string(session, "?- length(L, 2).", out2)
+  |> inspect(content="L = [_, _]")
+}
+
+///|
+test "arithmetic is and comparison" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  @love.answers_string(session, "?- X is 2 + 3 * 4.", out)
+  |> inspect(content="X = 14")
+  let out2 = StringBuilder()
+  @love.answers_string(session, "?- 2 + 3 =:= 5.", out2)
+  |> inspect(content="true")
+  let out3 = StringBuilder()
+  @love.answers_string(session, "?- 3 < 2.", out3) |> inspect(content="false")
+}
+
+///|
+test "cut prunes alternatives" {
+  let db = @love.program_from_text(
+    (
+      #|p(1).
+      #|p(2) :- !.
+      #|p(3).
+      #|q(X) :- p(X).
+      #|
+    ),
+  )
+  let session = @love.Session::new(db)
+  let out = StringBuilder()
+  @love.answers_string(session, "?- q(X).", out)
+  |> inspect(content="X = 1; X = 2")
+}
+
+///|
+test "cut in middle of body" {
+  let db = @love.program_from_text(
+    (
+      #|p(X) :- q(X), !, r(X).
+      #|q(1).
+      #|q(2).
+      #|r(1).
+      #|r(3).
+      #|
+    ),
+  )
+  let session = @love.Session::new(db)
+  let out = StringBuilder()
+  @love.answers_string(session, "?- p(X).", out) |> inspect(content="X = 1")
+}
+
+///|
+test "cut removes alternative clause" {
+  let db = @love.program_from_text(
+    (
+      #|p(X) :- q(X), !.
+      #|q(1).
+      #|q(2).
+      #|p(3).
+      #|
+    ),
+  )
+  let session = @love.Session::new(db)
+  let out = StringBuilder()
+  @love.answers_string(session, "?- p(X).", out) |> inspect(content="X = 1")
+}
+
+///|
+test "negation as failure" {
+  let db = @love.program_from_text(
+    (
+      #|man(tom).
+      #|man(bob).
+      #|woman(ann).
+      #|
+    ),
+  )
+  let session = @love.Session::new(db)
+  let out = StringBuilder()
+  @love.answers_string(session, "?- \\+ man(ann).", out)
+  |> inspect(content="true")
+  let out2 = StringBuilder()
+  @love.answers_string(session, "?- \\+ man(tom).", out2)
+  |> inspect(content="false")
+}
+
+///|
+test "findall collects solutions" {
+  let db = @love.program_from_text(
+    (
+      #|color(red).
+      #|color(green).
+      #|color(blue).
+      #|
+    ),
+  )
+  let session = @love.Session::new(db)
+  let out = StringBuilder()
+  @love.answers_string(session, "?- findall(C, color(C), L).", out)
+  |> inspect(content="L = [red, green, blue]")
+}
+
+///|
+test "disjunction with semicolon" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  @love.answers_string(session, "?- (X = a ; X = b ; X = c).", out)
+  |> inspect(content="X = a; X = b; X = c")
+}
+
+///|
+test "write builtin outputs to buffer" {
+  let db = @love.program_from_text(
+    (
+      #|greet(X) :- write('hello '), writeln(X).
+      #|
+    ),
+  )
+  let session = @love.Session::new(db)
+  let out = StringBuilder()
+  @love.answers_string(session, "?- greet(world).", out)
+  |> inspect(content="true")
+  out.to_string() |> inspect(content="hello world\n")
+}
+
+///|
+test "unification with occurs check" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  @love.answers_string(session, "?- X = f(X).", out) |> inspect(content="false")
+}
+
+///|
+test "family tree with multiple answers" {
+  let db = @love.program_from_text(
+    (
+      #|parent(tom, bob).
+      #|parent(tom, sue).
+      #|parent(bob, ann).
+      #|parent(sue, joe).
+      #|grandparent(X, Y) :- parent(X, Z), parent(Z, Y).
+      #|sibling(X, Y) :- parent(Z, X), parent(Z, Y), X \= Y.
+      #|
+    ),
+  )
+  let session = @love.Session::new(db)
+  let out = StringBuilder()
+  @love.answers_string(session, "?- grandparent(tom, Who).", out)
+  |> inspect(content="Who = ann; Who = joe")
+  let out2 = StringBuilder()
+  @love.answers_string(session, "?- sibling(bob, X).", out2)
+  |> inspect(content="X = sue")
+}
+
+///|
+test "quoted atoms and lists display" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  @love.answers_string(session, "?- X = 'hello world'.", out)
+  |> inspect(content="X = 'hello world'")
+  let out2 = StringBuilder()
+  @love.answers_string(session, "?- X = [a, b | T].", out2)
+  |> inspect(content="X = [a, b | T]")
+}
+
+///|
+test "variable identity preserved across clause" {
+  let db = @love.program_from_text(
+    (
+      #|same(X, X).
+      #|
+    ),
+  )
+  let session = @love.Session::new(db)
+  let out = StringBuilder()
+  @love.answers_string(session, "?- same(a, b).", out)
+  |> inspect(content="false")
+  let out2 = StringBuilder()
+  @love.answers_string(session, "?- same(a, a).", out2)
+  |> inspect(content="true")
+}
+
+///|
+test "unbound predicate fails" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  @love.answers_string(session, "?- unknown_predicate(x).", out)
+  |> inspect(content="false")
+}

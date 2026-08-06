@@ -1,5 +1,9 @@
-// import {
-//   "amistozy/love" @lib,
-// }
+import {
+  "amistozy/love",
+  "moonbitlang/async",
+  "moonbitlang/async/stdio",
+}
+
+supported_targets = "native"
 
 pkgtype(kind: "executable")
