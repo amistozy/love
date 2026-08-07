@@ -143,6 +143,44 @@ test "findall collects solutions" {
 }
 
 ///|
+test "findall with comma and disjunction goal" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  // goal 是 `,` 复合（多目标），需扁平化
+  @love.answers_string(
+    session, "?- findall(Y, (X : [1,2,3], Y is X+1), L).", out,
+  )
+  |> inspect(content="L = [2,3,4]")
+  // goal 混合 `,` 与 `;`
+  @love.answers_string(session, "?- findall(X, (X : [1,2] ; X = 9), L).", out)
+  |> inspect(content="L = [1,2,9]")
+  // `\+` 的 goal 含 `,`：有解则否定失败
+  @love.answers_string(session, "?- \\+ (X = 1, Y = 2).", out)
+  |> inspect(content="false")
+  @love.answers_string(session, "?- \\+ (X = 1, X = 2).", out)
+  |> inspect(content="true")
+}
+
+///|
+test "call meta predicate" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  // call 执行 `,` 复合目标
+  @love.answers_string(session, "?- call((X = 1, Y = 2)).", out)
+  |> inspect(content="X = 1, Y = 2")
+  // call 支持回溯
+  @love.answers_string(session, "?- call(X : [1,2]).", out)
+  |> inspect(content="X = 1; X = 2")
+  // call 执行 `;` 析取
+  @love.answers_string(session, "?- call((X : [1,2] ; X = 9)).", out)
+  |> inspect(content="X = 1; X = 2; X = 9")
+  // 数字/失败目标
+  @love.answers_string(session, "?- call(1).", out) |> inspect(content="false")
+  @love.answers_string(session, "?- call(fail).", out)
+  |> inspect(content="false")
+}
+
+///|
 test "disjunction with semicolon" {
   let session = @love.Session::new(@love.Database::new())
   let out = StringBuilder()

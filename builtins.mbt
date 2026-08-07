@@ -205,7 +205,9 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
     ">=/2": (args, e) => arith_cmp(args, e, (x, y) => x >= y),
     "\\+/1": (args, e) => {
       guard args is [a] else { Fail }
-      if sub_has_solution(e, [a], e.env) {
+      // 复用 call/1 执行任意目标（含 `,` 复合），
+      // 等价于 Scryer 的 `\+ G :- call(G), !, '$fail'.`
+      if sub_has_solution(e, [Compound("call", [a])], e.env) {
         Fail
       } else {
         Succeed
@@ -271,9 +273,16 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
         ]),
       ])
     },
+    "call/1": (args, e) => {
+      // call(Goal) = 把 Goal 作为目标执行（`,` 复合展开为目标序列）
+      guard args is [g] else { Fail }
+      Choice(e.env, [Candidate::Inline([], flatten(g))])
+    },
     "findall/3": (args, e) => {
       guard args is [t, goal, l] else { Fail }
-      let envs = sub_solve_all(e, [goal], e.env)
+      // 复用 call/1 执行任意目标（含 `,` 复合），
+      // 等价于 Scryer 的 `'$iterate_find_all'` 里的 `call(Goal)`
+      let envs = sub_solve_all(e, [Compound("call", [goal])], e.env)
       let terms = envs.map(env => walk_deep(t, env))
       let list = make_list(terms)
       match unify(l, list, e.env) {
