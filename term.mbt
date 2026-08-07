@@ -22,7 +22,10 @@ pub type Env = @hashmap.HashMap[String, Term]
 /// 收集项中出现的变量名（去重，保持出现顺序）
 pub fn collect_vars(t : Term, out : Array[String]) -> Unit {
   match t {
-    Var(name) => if !out.contains(name) { out.push(name) }
+    Var(name) =>
+      if !name.has_prefix("_#") && !out.contains(name) {
+        out.push(name)
+      }
     Compound(_, args) =>
       for a in args {
         collect_vars(a, out)

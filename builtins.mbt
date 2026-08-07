@@ -87,11 +87,13 @@ fn list_length(t : Term, env : Env) -> Int {
 }
 
 ///|
-/// 生成长度为 `len` 的匿名变量列表
+/// 生成长度为 `len` 的匿名变量列表。
+/// 内部名用 `_#gN`（以 `_#` 开头，显示为 `_`），
+/// 避免与解析器匿名变量 `_#N` 重名导致跨查询状态污染。
 fn fresh_list(e : Engine, len : Int) -> Term {
   let mut acc : Term = Atom("[]")
   for _i in 0..<len {
-    let v = Var(fresh_var_name(e, "_"))
+    let v = Var(fresh_var_name(e, "_#g"))
     acc = Compound(".", [v, acc])
   }
   acc
