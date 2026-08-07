@@ -39,6 +39,7 @@ fn infix_ops() -> Map[String, Op] {
     "=:=": { prec: 700, assoc: Xfx },
     "=\\=": { prec: 700, assoc: Xfx },
     "is": { prec: 700, assoc: Xfx },
+    ":": { prec: 700, assoc: Xfx },
     "+": { prec: 500, assoc: Yfx },
     "-": { prec: 500, assoc: Yfx },
     "*": { prec: 400, assoc: Yfx },
@@ -55,7 +56,6 @@ fn infix_ops() -> Map[String, Op] {
 fn prefix_ops() -> Map[String, Op] {
   {
     "\\+": { prec: 900, assoc: Fy },
-    "not": { prec: 900, assoc: Fy },
     "-": { prec: 200, assoc: Fy },
     "let": { prec: 1300, assoc: Fy },
     "del": { prec: 1300, assoc: Fy },

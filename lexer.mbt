@@ -158,7 +158,7 @@ let multi_symbols : Array[String] = [
 /// 单字符符号
 let single_symbols : Array[String] = [
   ",", ";", "|", "!", "(", ")", "[", "]", ".", "=", "<", ">", "+", "-", "*", "/",
-  "\\",
+  ":", "\\",
 ]
 
 ///|

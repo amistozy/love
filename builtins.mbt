@@ -211,21 +211,14 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
         Succeed
       }
     },
-    "not/1": (args, e) => {
-      guard args is [a] else { Fail }
-      if sub_has_solution(e, [a], e.env) {
-        Fail
-      } else {
-        Succeed
-      }
-    },
-    "member/2": (args, e) => {
+    ":/2": (args, e) => {
+      // `X : [1,2,3]`：X 属于列表（member 的中缀运算符形式）
       guard args is [x, l] else { Fail }
       let h = Var(fresh_var_name(e, "H"))
       let t = Var(fresh_var_name(e, "T"))
       Choice(e.env, [
         Inline([(l, Compound(".", [x, t]))], []),
-        Inline([(l, Compound(".", [h, t]))], [Compound("member", [x, t])]),
+        Inline([(l, Compound(".", [h, t]))], [Compound(":", [x, t])]),
       ])
     },
     "length/2": (args, e) => {

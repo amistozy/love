@@ -100,10 +100,10 @@ test "fibonacci" {
 }
 
 ///|
-test "member with concrete list and predicate" {
+test ": with concrete list and predicate" {
   let db = program_from_text(
     (
-      #|has(X, L) :- member(X, L).
+      #|has(X, L) :- X : L.
       #|
     ),
   )

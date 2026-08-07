@@ -18,7 +18,7 @@ moon run --target native cmd/main   # 启动 REPL
 提示符 `?- ` 后直接输入查询目标，采用 SWI-Prolog 风格的逐解交互：
 
 ```prolog
-?- member(X, [1, 2, 3]).
+?- X : [1,2,3].
 X = 1 ;
 X = 2 ;
 X = 3.           ← 预读（lookahead）发现无更多解，自动以句号收尾
@@ -34,7 +34,7 @@ X = 1.           ← 单解直接结束，无需输入分号/句号
 
 | 操作 | 行为 |
 |---|---|
-| 输入查询目标 | 提示符 `?- ` 后直接输入，如 `member(X, [1, 2])`. |
+| 输入查询目标 | 提示符 `?- ` 后直接输入，如 `X : [1,2]`. |
 | `;` 看下一个解 | 有后续解时行尾显示 ` ;`，最后一个解自动 `.` 收尾 |
 | 无更多解 | 打印 `false.` |
 | 多行输入 | 输入不以 `.` 结束时用 ` | ` 续行（如长查询换行写） |
@@ -89,7 +89,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 1300 fy   let del
 1200 xfx  :-
 1100 xfy  ;          1000 xfy  ,
- 900 fy   \+ not      700 xfx  = \= == \== < > =< >= =:= =\= is
+ 900 fy   \+         700 xfx  = \= == \== < > =< >= =:= =\= is :
  500 yfx  + -         400 yfx  * / // mod
  200 fy   -
 ```
@@ -108,11 +108,11 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 
 ## 内建谓词
 
-- 控制：`true/0`、`fail/0`、`!/0`、`\+/1`、`not/1`、析取 `;/2`
+- 控制：`true/0`、`fail/0`、`!/0`、`\+/1`、析取 `;/2`
 - 合一/比较：`=/2`、`\=/2`、`==/2`、`\==/2`
 - 项检查：`var/1`、`nonvar/1`、`atom/1`、`integer/1`、`atomic/1`、`compound/1`、`ground/1`
 - 算术：`is/2`、`=:=/2`、`=\=/2`、`</2`、`>/2`、`=</2`、`>=/2`
-- 列表：`member/2`、`length/2`（双向）、`append/3`
+- 列表：`:/2`（`X : [1,2,3]`，中缀成员）、`length/2`（双向）、`append/3`
 - 元编程：`findall/3`
 - 动态数据库：`let/1`（断言，对应 `assert`）、`del/1`（按谓词指示符 `Name/Arity` 删除全部子句）
 - 会话：`cls/0`（清屏）、`halt/0`（退出）、`consult/1`（加载 `name.love`，`[name].` 为其语法糖）
@@ -169,7 +169,7 @@ p(3).
 | `parser.mbt` | 递归下降 + 优先级爬升 |
 | `unify.mbt` | 合一（持久化 HashMap + occurs check） |
 | `engine.mbt` | 数据库、会话、选择点栈求解引擎 |
-| `builtins.mbt` | 内建谓词（member/length/append 用伪子句展开实现双向性） |
+| `builtins.mbt` | 内建谓词（: /2 等用伪子句展开实现双向性） |
 | `api.mbt` | 顶层 API（`program_from_text`、`answers_string`） |
 | `cmd/main/` | 交互式 REPL（native + async stdio） |
 

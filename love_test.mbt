@@ -26,10 +26,10 @@ test "append generates all splits" {
 }
 
 ///|
-test "member enumerates solutions" {
+test ": enumerates solutions" {
   let session = @love.Session::new(@love.Database::new())
   let out = StringBuilder()
-  @love.answers_string(session, "?- member(X, [a, b, c]).", out)
+  @love.answers_string(session, "?- X : [a,b,c].", out)
   |> inspect(content="X = a; X = b; X = c")
 }
 
