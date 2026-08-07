@@ -130,7 +130,7 @@ priv enum Candidate {
 ///|
 /// 选择点：记录回溯时恢复的状态
 priv struct ChoicePoint {
-  goals : Array[Term]
+  goals : ArrayView[Term]
   env : Env
   candidates : Array[Candidate]
   mut ci : Int
@@ -146,7 +146,7 @@ priv struct ChoicePoint {
 /// 求解状态（目标、环境、选择点栈）完全隐藏。
 struct Engine {
   session : Session
-  mut goals : Array[Term]
+  mut goals : ArrayView[Term]
   mut env : Env
   stack : Array[ChoicePoint]
   mut cut_marker : Int
@@ -154,7 +154,7 @@ struct Engine {
 }
 
 ///|
-/// 从查询目标创建引擎
+/// 从查询目标创建引擎（goals 转 view，推进时切片零拷贝）
 pub fn Engine::new(session : Session, goals : Array[Term], env : Env) -> Engine {
   { session, goals, env, stack: [], cut_marker: 0, exhausted: false }
 }
@@ -214,14 +214,12 @@ priv enum StepResult {
 /// 推进一步求解；返回是否需要继续 / 找到解 / 彻底失败
 fn Engine::step_once(self : Engine) -> StepResult {
   for ;; {
-    if self.goals.is_empty() {
-      return SolutionFound
-    }
-    let g = self.goals[0]
+    // 取 goals 头与尾（guard is 解构）
+    guard self.goals is [g, .. rest] else { return SolutionFound }
     if g is Atom("!") {
       // cut：截断选择点栈到当前子句进入时的高度
       self.stack.truncate(self.cut_marker)
-      self.goals = self.goals[1:].to_owned()
+      self.goals = rest
       continue
     }
     if self.solve_goal(g) {
@@ -267,6 +265,8 @@ pub fn Engine::next_solution(self : Engine) -> Env? {
 /// 求解当前目标 `g`（goals[0]）。成功时推进 goals，返回 true；
 /// 失败时返回 false（调用方负责回溯）。
 fn Engine::solve_goal(self : Engine, g : Term) -> Bool {
+  // 取 goals 尾（成功时推进用；guard is 解构）
+  guard self.goals is [_, .. rest] else { return false }
   // 目标先沿环境展开：绑定到具体项则按其求解；
   // 变量或数字不能作为目标（如 `?- X.` / `?- 1.`），失败而非崩溃
   let g = match walk(g, self.env) {
@@ -291,12 +291,12 @@ fn Engine::solve_goal(self : Engine, g : Term) -> Bool {
       match result {
         Fail => false
         Succeed => {
-          self.goals = self.goals[1:].to_owned()
+          self.goals = rest
           true
         }
         SucceedEnv(env) => {
           self.env = env
-          self.goals = self.goals[1:].to_owned()
+          self.goals = rest
           true
         }
         Choice(env, cands) => {
@@ -336,6 +336,8 @@ fn Engine::push_choice(self : Engine, cands : Array[Candidate]) -> Unit {
 /// 尝试当前选择点的下一个候选；成功返回 true，失败时回溯到栈顶
 /// 的其他选择点或返回 false
 fn Engine::try_candidate(self : Engine, g : Term) -> Bool {
+  // 取 goals 尾（候选成功时推进用；guard is 解构）
+  guard self.goals is [_, .. rest] else { return false }
   for ;; {
     if self.stack.is_empty() {
       return false
@@ -356,10 +358,10 @@ fn Engine::try_candidate(self : Engine, g : Term) -> Bool {
           Some(env2) => {
             self.env = env2
             if body.is_empty() {
-              self.goals = self.goals[1:].to_owned()
+              self.goals = rest
             } else {
               self.cut_marker = cp_marker
-              self.goals = body + self.goals[1:].to_owned()
+              self.goals = body + rest.to_owned()
             }
             true
           }
@@ -383,10 +385,10 @@ fn Engine::try_candidate(self : Engine, g : Term) -> Bool {
         } else {
           self.env = env
           if body.is_empty() {
-            self.goals = self.goals[1:].to_owned()
+            self.goals = rest
           } else {
             self.cut_marker = cp_marker
-            self.goals = body + self.goals[1:].to_owned()
+            self.goals = body + rest.to_owned()
           }
           true
         }
@@ -412,7 +414,8 @@ fn Engine::backtrack(self : Engine) -> Bool {
       self.goals = cp.goals
       self.env = cp.env
       self.cut_marker = cp.cut_ctx
-      if self.try_candidate(self.goals[0]) {
+      guard self.goals is [g, ..] else { return false }
+      if self.try_candidate(g) {
         return true
       }
       // try_candidate 已耗尽并弹出该选择点，继续回溯更早的选择点
