@@ -198,6 +198,35 @@ test "function notation and operator spacing" {
 }
 
 ///|
+test "bagof setof between" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  let _ = @love.load_text(session, "f(1, 2). f(1, 3). f(2, 4).")
+  // between 枚举
+  @love.answers_string(session, "?- between(3, 5, X).", out)
+  |> inspect(content="X = 3; X = 4; X = 5")
+  // between 检查
+  @love.answers_string(session, "?- between(1, 3, 2).", out)
+  |> inspect(content="true")
+  @love.answers_string(session, "?- between(1, 3, 5).", out)
+  |> inspect(content="false")
+  // bagof 按 witness（Y）分组，每组一个解
+  @love.answers_string(session, "?- bagof(X, f(X, Y), L).", out)
+  |> inspect(content="L = [1]; L = [1]; L = [2]")
+  // ^ 存在量化：Y 不分组
+  @love.answers_string(session, "?- bagof(X, Y^f(X, Y), L).", out)
+  |> inspect(content="L = [1,1,2]")
+  // bagof 无解 → 失败（区别于 findall 的 []）
+  @love.answers_string(session, "?- bagof(X, f(X, 9), L).", out)
+  |> inspect(content="false")
+  // setof 排序去重
+  @love.answers_string(session, "?- setof(X, Y^f(X, Y), L).", out)
+  |> inspect(content="L = [1,2]")
+  @love.answers_string(session, "?- setof(X-Y, f(X, Y), L).", out)
+  |> inspect(content="L = [1-2,1-3,2-4]")
+}
+
+///|
 test "disjunction with semicolon" {
   let session = @love.Session::new(@love.Database::new())
   let out = StringBuilder()

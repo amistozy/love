@@ -100,6 +100,104 @@ fn fresh_list(e : Engine, len : Int) -> Term {
 }
 
 ///|
+/// bagof/3 的 witness 变量：Goal 中不在 Template、未被 `^` 量化、
+/// 且当前未绑定的变量。witness 的绑定决定分组。
+fn bagof_witness(e : Engine, t : Term, goal : Term) -> Array[String] {
+  let goal_vars = []
+  collect_vars(goal, goal_vars)
+  let t_vars = []
+  collect_vars(t, t_vars)
+  // `^` 量化的变量：Goal 形如 `X^Rest` / `X^Y^Rest`
+  let qvars = []
+  let mut g = walk(goal, e.env)
+  for ;; {
+    match g {
+      Compound("^", [v, rest]) => {
+        collect_vars(v, qvars)
+        g = walk(rest, e.env)
+      }
+      _ => break
+    }
+  }
+  let out = []
+  for v in goal_vars {
+    if t_vars.contains(v) || qvars.contains(v) {
+      continue
+    }
+    if walk(Var(v), e.env) is Var(_) {
+      out.push(v)
+    }
+  }
+  out
+}
+
+///|
+/// 剥离 goal 的 `^` 存在量词前缀：`X^Y^Goal` -> `Goal`
+/// （`^` 是量词语法，不可作为目标执行）
+fn strip_existential(goal : Term) -> Term {
+  let mut g = goal
+  for ;; {
+    match g {
+      Compound("^", [_, rest]) => g = rest
+      _ => break
+    }
+  }
+  g
+}
+
+///|
+/// 两个环境下 witness 变量的绑定是否相同（同组判定）
+fn same_witness(env1 : Env, env2 : Env, witness : Array[String]) -> Bool {
+  let empty = @hashmap.HashMap::new()
+  for w in witness {
+    let t1 = walk_deep(Var(w), env1)
+    let t2 = walk_deep(Var(w), env2)
+    if term_compare(t1, t2, empty) != 0 {
+      return false
+    }
+  }
+  true
+}
+
+///|
+/// 按 witness 绑定对组排序（组键 = 组首环境下的 witness 绑定序列）
+fn sort_groups(groups : Array[Array[Env]], witness : Array[String]) -> Unit {
+  let empty = @hashmap.HashMap::new()
+  groups.sort_by((g1, g2) => {
+    for w in witness {
+      let r = term_compare(
+        walk_deep(Var(w), g1[0]),
+        walk_deep(Var(w), g2[0]),
+        empty,
+      )
+      if r != 0 {
+        return r
+      }
+    }
+    0
+  })
+}
+
+///|
+/// 对项列表排序（term_compare，插入排序）
+fn sort_terms(ts : Array[Term], env : Env) -> Array[Term] {
+  ts.sort_by((a, b) => term_compare(a, b, env))
+  ts
+}
+
+///|
+/// 项列表去重（相邻相同项，需已排序）
+fn dedup_terms(ts : Array[Term], env : Env) -> Array[Term] {
+  let out = []
+  for t in ts {
+    if out.is_empty() || term_compare(out[out.length() - 1], t, env) != 0 {
+      out.push(t)
+    }
+  }
+  out
+}
+
+///|
 /// 内建谓词表：谓词键 -> 实现（接收参数数组）
 fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
   let table : Map[String, (Array[Term], Engine) -> BuiltinResult] = {
@@ -288,6 +386,118 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
       match unify(l, list, e.env) {
         Some(env) => SucceedEnv(env)
         None => Fail
+      }
+    },
+    "bagof/3": (args, e) => {
+      // bagof(T, Goal, Bag)：按 Goal 中自由变量（witness）的绑定分组，
+      // 每组产生一个解。无解时失败（与 findall 的 [] 不同）。
+      guard args is [t, goal, bag] else { Fail }
+      let witness = bagof_witness(e, t, goal)
+      let envs = sub_solve_all(
+        e,
+        [Compound("call", [strip_existential(goal)])],
+        e.env,
+      )
+      if envs.is_empty() {
+        Fail
+      } else if witness.is_empty() {
+        // 无 witness：单组
+        let terms = envs.map(env => walk_deep(t, env))
+        match unify(bag, make_list(terms), e.env) {
+          Some(env) => SucceedEnv(env)
+          None => Fail
+        }
+      } else {
+        // 按 witness 绑定分组
+        let groups : Array[Array[Env]] = []
+        for env in envs {
+          let mut placed = false
+          for g in groups {
+            if same_witness(g[0], env, witness) {
+              g.push(env)
+              placed = true
+              break
+            }
+          }
+          if !placed {
+            groups.push([env])
+          }
+        }
+        sort_groups(groups, witness)
+        let cands = groups.map(g => {
+          let terms = g.map(env => walk_deep(t, env))
+          Candidate::Inline([(bag, make_list(terms))], [])
+        })
+        Choice(e.env, cands)
+      }
+    },
+    "setof/3": (args, e) => {
+      // setof(T, Goal, Set)：bagof + 每组内排序去重
+      guard args is [t, goal, set] else { Fail }
+      let witness = bagof_witness(e, t, goal)
+      let envs = sub_solve_all(
+        e,
+        [Compound("call", [strip_existential(goal)])],
+        e.env,
+      )
+      if envs.is_empty() {
+        Fail
+      } else if witness.is_empty() {
+        let terms = dedup_terms(
+          sort_terms(envs.map(env => walk_deep(t, env)), e.env),
+          e.env,
+        )
+        match unify(set, make_list(terms), e.env) {
+          Some(env) => SucceedEnv(env)
+          None => Fail
+        }
+      } else {
+        let groups : Array[Array[Env]] = []
+        for env in envs {
+          let mut placed = false
+          for g in groups {
+            if same_witness(g[0], env, witness) {
+              g.push(env)
+              placed = true
+              break
+            }
+          }
+          if !placed {
+            groups.push([env])
+          }
+        }
+        sort_groups(groups, witness)
+        let cands = groups.map(g => {
+          let terms = dedup_terms(
+            sort_terms(g.map(env => walk_deep(t, env)), e.env),
+            e.env,
+          )
+          Candidate::Inline([(set, make_list(terms))], [])
+        })
+        Choice(e.env, cands)
+      }
+    },
+    "between/3": (args, e) => {
+      // between(Low, High, X)：X ∈ [Low, High]，可检查或枚举
+      guard args is [lo, hi, x] else { Fail }
+      match (walk(lo, e.env), walk(hi, e.env), walk(x, e.env)) {
+        (Int(a), Int(b), Int(n)) =>
+          if a <= n && n <= b {
+            Succeed
+          } else {
+            Fail
+          }
+        (Int(a), Int(b), Var(_)) =>
+          if a <= b {
+            let cands = []
+            for n in a..<=b {
+              cands.push(Candidate::Inline([(x, Int(n))], []))
+            }
+            Choice(e.env, cands)
+          } else {
+            Fail
+          }
+        _ => Fail
       }
     },
     "write/1": (args, e) => {

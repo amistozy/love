@@ -40,6 +40,7 @@ fn infix_ops() -> Map[String, Op] {
     "=\\=": { prec: 700, assoc: Xfx },
     "is": { prec: 700, assoc: Xfx },
     ":": { prec: 700, assoc: Xfx },
+    "^": { prec: 200, assoc: Xfy },
     "+": { prec: 500, assoc: Yfx },
     "-": { prec: 500, assoc: Yfx },
     "*": { prec: 400, assoc: Yfx },

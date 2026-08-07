@@ -120,3 +120,39 @@ pub fn is_ground(t : Term, env : Env) -> Bool {
     _ => true
   }
 }
+
+///|
+/// 标准项顺序比较（ISO 7.2）：变量 < 整数 < 原子 < 复合。
+/// 返回 -1 / 0 / 1。变量之间按名字比较（实现相关）。
+/// 用于 setof/3 的排序与 bagof/3 的分组键。
+pub fn term_compare(a : Term, b : Term, env : Env) -> Int {
+  fn cmp_list(xs : Array[Term], ys : Array[Term], env : Env) -> Int {
+    let n = if xs.length() < ys.length() { xs.length() } else { ys.length() }
+    for i in 0..<n {
+      let r = term_compare(xs[i], ys[i], env)
+      if r != 0 {
+        return r
+      }
+    }
+    xs.length().compare(ys.length())
+  }
+  match (walk(a, env), walk(b, env)) {
+    (Var(x), Var(y)) => x.compare(y)
+    (Var(_), _) => -1
+    (_, Var(_)) => 1
+    (Int(x), Int(y)) => x.compare(y)
+    (Int(_), _) => -1
+    (_, Int(_)) => 1
+    (Atom(x), Atom(y)) => x.compare(y)
+    (Atom(_), _) => -1
+    (_, Atom(_)) => 1
+    (Compound(n1, a1), Compound(n2, a2)) => {
+      let r = n1.compare(n2)
+      if r != 0 {
+        r
+      } else {
+        cmp_list(a1, a2, env)
+      }
+    }
+  }
+}
