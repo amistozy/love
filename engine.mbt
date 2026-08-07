@@ -6,17 +6,16 @@ pub struct Clause {
 }
 
 ///|
-/// 谓词数据库：子句序列 + (name/arity) 索引。
+/// 谓词数据库：`(name/arity)` -> 该谓词的子句列表（保持书写顺序）。
 /// 抽象类型：外部只能通过 `new`/`add_clause`/`lookup` 等公开方法交互，
-/// 内部表示（子句列表与索引）完全隐藏。
+/// 内部表示完全隐藏。跨谓词顺序在 Prolog 语义上无关紧要。
 struct Database {
-  clauses : Array[Clause]
-  mut index : Map[String, Array[Int]]
+  procs : Map[String, Array[Clause]]
 }
 
 ///|
 pub fn Database::new() -> Database {
-  { clauses: [], index: {} }
+  { procs: {} }
 }
 
 ///|
@@ -30,32 +29,30 @@ fn pred_key(t : Term) -> String {
 }
 
 ///|
-/// 追加一个子句到数据库
+/// 追加一个子句到数据库（谓词内的书写顺序保持）
 pub fn Database::add_clause(
   self : Database,
   head : Term,
   body : Array[Term],
 ) -> Unit {
   let key = pred_key(head)
-  self.clauses.push({ head, body })
-  let id = self.clauses.length() - 1
-  match self.index.get(key) {
-    Some(arr) => arr.push(id)
-    None => self.index[key] = [id]
+  match self.procs.get(key) {
+    Some(arr) => arr.push({ head, body })
+    None => self.procs[key] = [{ head, body }]
   }
 }
 
 ///|
-/// 按谓词键查询匹配子句的索引
-pub fn Database::lookup(self : Database, key : String) -> Array[Int] {
-  match self.index.get(key) {
+/// 按谓词键查询该谓词的子句列表
+pub fn Database::lookup(self : Database, key : String) -> Array[Clause] {
+  match self.procs.get(key) {
     Some(arr) => arr
     None => []
   }
 }
 
 ///|
-/// 删除指定谓词（`name/arity`）的全部子句，重建索引。
+/// 删除指定谓词（`name/arity`）的全部子句。
 /// 至少删除一个时返回 `true`。
 pub fn Database::remove_predicate(
   self : Database,
@@ -63,28 +60,9 @@ pub fn Database::remove_predicate(
   arity : Int,
 ) -> Bool {
   let key = "\{name}/\{arity}"
-  let mut removed = false
-  // 从后往前删，避免索引错位
-  let mut i = self.clauses.length() - 1
-  while i >= 0 {
-    if pred_key(self.clauses[i].head) == key {
-      let _ = self.clauses.remove(i)
-      removed = true
-    }
-    i = i - 1
-  }
-  if removed {
-    // 重建索引
-    self.index = {}
-    for k in 0..<self.clauses.length() {
-      let key = pred_key(self.clauses[k].head)
-      match self.index.get(key) {
-        Some(arr) => arr.push(k)
-        None => self.index[key] = [k]
-      }
-    }
-  }
-  removed
+  let existed = self.procs.get(key) is Some(_)
+  self.procs.remove(key)
+  existed
 }
 
 ///|
@@ -142,9 +120,10 @@ fn fresh_var_name(e : Engine, prefix : String) -> String {
 
 ///|
 /// 候选：数据库子句，或内联展开（`;` 析取、member/length/append 的展开子句）。
+/// 数据库子句直接持有引用（删除谓词后仍有效，引用计数保证）。
 /// 仅作为 ChoicePoint 的内部字段类型使用。
 priv enum Candidate {
-  Db(Int)
+  Db(Clause)
   Inline(Array[(Term, Term)], Array[Term])
 }
 
@@ -328,7 +307,7 @@ fn Engine::solve_goal(self : Engine, g : Term) -> Bool {
       }
     None => {
       let key = pred_key(g)
-      let cands = self.session.db.lookup(key).map(i => Candidate::Db(i))
+      let cands = self.session.db.lookup(key).map(c => Candidate::Db(c))
       if cands.is_empty() {
         false
       } else {
@@ -370,8 +349,7 @@ fn Engine::try_candidate(self : Engine, g : Term) -> Bool {
     self.stack[idx].ci = self.stack[idx].ci + 1
     let cp_marker = self.stack[idx].marker
     let ok = match cand {
-      Candidate::Db(i) => {
-        let clause = self.session.db.clauses[i]
+      Candidate::Db(clause) => {
         let (head, body) = rename_clause(self, clause)
         match unify(g, head, self.env) {
           None => false

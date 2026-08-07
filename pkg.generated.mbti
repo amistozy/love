@@ -36,6 +36,8 @@ pub fn query(Session, String) -> Engine raise LoveError
 
 pub fn solve_all(Engine) -> Array[@hashmap.HashMap[String, Term]]
 
+pub fn term_compare(Term, Term, @hashmap.HashMap[String, Term]) -> Int
+
 pub fn term_identical(Term, Term, @hashmap.HashMap[String, Term]) -> Bool
 
 pub fn term_to_string(Term, @hashmap.HashMap[String, Term]) -> String
@@ -64,7 +66,7 @@ pub struct Clause {
 
 type Database
 pub fn Database::add_clause(Self, Term, Array[Term]) -> Unit
-pub fn Database::lookup(Self, String) -> Array[Int]
+pub fn Database::lookup(Self, String) -> Array[Clause]
 pub fn Database::new() -> Self
 pub fn Database::remove_predicate(Self, String, Int) -> Bool
 
