@@ -67,7 +67,7 @@ test "reversed list program (nrev)" {
   let session = Session::new(db)
   let out = StringBuilder()
   answers_string(session, "?- nrev([1, 2, 3, 4], X).", out)
-  |> inspect(content="X = [4, 3, 2, 1]")
+  |> inspect(content="X = [4,3,2,1]")
 }
 
 ///|
@@ -127,7 +127,7 @@ test "findall with arithmetic goal" {
   let session = Session::new(db)
   let out = StringBuilder()
   answers_string(session, "?- findall(X, (X = 1 ; X = 2 ; X = 3), L).", out)
-  |> inspect(content="L = [1, 2, 3]")
+  |> inspect(content="L = [1,2,3]")
 }
 
 ///|
@@ -160,5 +160,5 @@ test "write shows operator terms" {
   let session = Session::new(Database::new())
   let out = StringBuilder()
   answers_string(session, "?- write(2 + 3).", out) |> inspect(content="true")
-  out.to_string() |> inspect(content="2 + 3")
+  out.to_string() |> inspect(content="2+3")
 }

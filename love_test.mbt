@@ -21,7 +21,7 @@ test "append generates all splits" {
   let out = StringBuilder()
   @love.answers_string(session, "?- append(X, Y, [1, 2, 3]).", out)
   |> inspect(
-    content="X = [], Y = [1, 2, 3]; X = [1], Y = [2, 3]; X = [1, 2], Y = [3]; X = [1, 2, 3], Y = []",
+    content="X = [], Y = [1,2,3]; X = [1], Y = [2,3]; X = [1,2], Y = [3]; X = [1,2,3], Y = []",
   )
 }
 
@@ -41,7 +41,7 @@ test "length works both directions" {
   |> inspect(content="N = 3")
   let out2 = StringBuilder()
   @love.answers_string(session, "?- length(L, 2).", out2)
-  |> inspect(content="L = [_, _]")
+  |> inspect(content="L = [_,_]")
 }
 
 ///|
@@ -139,7 +139,7 @@ test "findall collects solutions" {
   let session = @love.Session::new(db)
   let out = StringBuilder()
   @love.answers_string(session, "?- findall(C, color(C), L).", out)
-  |> inspect(content="L = [red, green, blue]")
+  |> inspect(content="L = [red,green,blue]")
 }
 
 ///|
@@ -201,8 +201,8 @@ test "quoted atoms and lists display" {
   @love.answers_string(session, "?- X = 'hello world'.", out)
   |> inspect(content="X = 'hello world'")
   let out2 = StringBuilder()
-  @love.answers_string(session, "?- X = [a, b | T].", out2)
-  |> inspect(content="X = [a, b | T]")
+  @love.answers_string(session, "?- X = [a,b | T].", out2)
+  |> inspect(content="X = [a,b|T]")
 }
 
 ///|

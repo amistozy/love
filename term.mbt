@@ -91,7 +91,7 @@ fn write_list(t : Term, env : Env, sb : StringBuilder, quote : Bool) -> Unit {
       Atom("[]") => break
       Compound(".", [h, tl]) => {
         if !first {
-          sb.write_string(", ")
+          sb.write_string(",")
         }
         first = false
         write_term(h, env, sb, 1001, quote)
@@ -100,7 +100,7 @@ fn write_list(t : Term, env : Env, sb : StringBuilder, quote : Bool) -> Unit {
           Atom("[]") => cur = wl
           Compound(".", _) => cur = wl
           _ => {
-            sb.write_string(" | ")
+            sb.write_string("|")
             write_term(wl, env, sb, 1001, quote)
             break
           }
@@ -109,7 +109,7 @@ fn write_list(t : Term, env : Env, sb : StringBuilder, quote : Bool) -> Unit {
       _ => {
         // 非列表结构（如 .(a, b)）：打印为 | tail
         if !first {
-          sb.write_string(" | ")
+          sb.write_string("|")
         }
         write_term(w, env, sb, 1001, quote)
         break
@@ -154,7 +154,7 @@ pub fn write_term(
                 sb.write_char('(')
                 for i in 0..<args.length() {
                   if i > 0 {
-                    sb.write_string(", ")
+                    sb.write_string(",")
                   }
                   write_term(args[i], env, sb, 999, quote)
                 }
@@ -186,9 +186,7 @@ fn write_infix(
           let left_prec = if assoc is Yfx { prec } else { prec - 1 }
           let right_prec = if assoc is Xfy { prec } else { prec - 1 }
           write_term(l, env, sb, left_prec, quote)
-          sb.write_string(" ")
           sb.write_string(name)
-          sb.write_string(" ")
           write_term(r, env, sb, right_prec, quote)
           if paren {
             sb.write_char(')')
@@ -255,7 +253,7 @@ pub fn clause_to_string(head : Term, body : Array[Term]) -> String {
     sb.write_string(" :- ")
     for i in 0..<body.length() {
       if i > 0 {
-        sb.write_string(", ")
+        sb.write_string(",")
       }
       write_term(body[i], @hashmap.HashMap::new(), sb, 1000, true)
     }
