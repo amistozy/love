@@ -64,7 +64,7 @@ pub fn parse_query_text(src : String) -> Array[Term] raise LoveError {
     }
     _ => ()
   }
-  let t = p.parse_term(1199)
+  let t = p.parse_term(1300)
   let goals = flatten(t)
   match p.peek() {
     Token::Symbol(".") => {
@@ -154,7 +154,7 @@ fn peek_prefix(p : Parser) -> (String, Int, Assoc)? {
 ///|
 /// 解析项：`max_prec` 为该位置允许的最大运算符优先级
 fn Parser::parse_term(self : Parser, max_prec : Int) -> Term raise LoveError {
-  let mut left = self.parse_prefix()
+  let mut left = self.parse_prefix(max_prec)
   for ;; {
     match peek_infix(self) {
       None => break left
@@ -183,18 +183,23 @@ fn Parser::parse_term(self : Parser, max_prec : Int) -> Term raise LoveError {
 }
 
 ///|
-/// 解析前缀运算符或基本项
-fn Parser::parse_prefix(self : Parser) -> Term raise LoveError {
+/// 解析前缀运算符或基本项。
+/// 仅在 `prec <= max_prec` 时吸收（ISO：`X = \+ 1` 中 `\+` 900 超过
+/// `=` 右操作数 699 的允许范围，报语法错误；顶层 max_prec 1300 允许 let/del）。
+fn Parser::parse_prefix(self : Parser, max_prec : Int) -> Term raise LoveError {
   match peek_prefix(self) {
-    Some((name, prec, assoc)) => {
-      let _ = self.advance()
-      let arg_max = match assoc {
-        Fy => prec
-        _ => prec - 1
+    Some((name, prec, assoc)) =>
+      if prec <= max_prec {
+        let _ = self.advance()
+        let arg_max = match assoc {
+          Fy => prec
+          _ => prec - 1
+        }
+        let arg = self.parse_term(arg_max)
+        Compound(name, [arg])
+      } else {
+        self.parse_primary()
       }
-      let arg = self.parse_term(arg_max)
-      Compound(name, [arg])
-    }
     None => self.parse_primary()
   }
 }
@@ -231,7 +236,8 @@ fn Parser::parse_primary(self : Parser) -> Term raise LoveError {
     }
     Token::Symbol("(") => {
       let _ = self.advance()
-      let t = self.parse_term(1200)
+      // 括号内允许任意项（含 let/del 1300）
+      let t = self.parse_term(1300)
       self.expect(")")
       t
     }

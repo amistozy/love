@@ -108,9 +108,16 @@ async fn run_query(session : @love.Session, src : String) -> Unit {
             @stdio.stdout.write(", ")
           }
           @stdio.stdout.write("\{vars[i]} = ")
-          @stdio.stdout.write(
-            @love.term_to_string(@love.walk_deep(Var(vars[i]), env), env),
+          // 解值写在 `=` 右操作数上下文（699），保证 `X = \+1` 重读无歧义
+          let vsb = StringBuilder()
+          @love.write_term(
+            @love.walk_deep(Var(vars[i]), env),
+            env,
+            vsb,
+            699,
+            true,
           )
+          @stdio.stdout.write(vsb.to_string())
           shown = shown + 1
         }
         // 无绑定变量的解（如 let/del 断言成功、析取的 true 分支）：显示 `true`

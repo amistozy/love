@@ -89,7 +89,11 @@ pub fn answers_string(
         }
         sb.write_string(vars[i])
         sb.write_string(" = ")
-        sb.write_string(term_to_string(walk_deep(Var(vars[i]), env), env))
+        // 解值写在 `=`（700 xfx）右操作数上下文（699），
+        // 保证 `X = \+1` 这类前缀项重读无歧义（与 Scryer 一致）
+        let vsb = StringBuilder()
+        write_term(walk_deep(Var(vars[i]), env), env, vsb, 699, true)
+        sb.write_string(vsb.to_string())
         shown = shown + 1
       }
       if shown == 0 {

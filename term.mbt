@@ -203,6 +203,8 @@ fn write_infix(
 
 ///|
 /// 前缀运算符项的写出
+/// 前缀在操作数位置需要括号当 `prec > min_prec`：parse_prefix 只在
+/// `prec <= max_prec` 时吸收，否则重读报错（如 `X = \+ 1` 中 `\+` 900 > 699）
 fn write_prefix(
   w : Term,
   env : Env,
@@ -219,7 +221,11 @@ fn write_prefix(
             sb.write_char('(')
           }
           sb.write_string(name)
-          sb.write_string(" ")
+          // 符号类前缀运算符（- \+）紧凑；字母类（let/del）需空格分隔避免黏连
+          let first = name[0]
+          if first >= 97 && first <= 122 {
+            sb.write_string(" ")
+          }
           write_term(a, env, sb, prec - 1, quote)
           if paren {
             sb.write_char(')')
