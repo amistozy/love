@@ -1,7 +1,7 @@
 ///|
 /// 白盒测试：解析器细节与内部行为
 test "operator precedence parsing" {
-  let goals = parse_query_text("?- X is 1 + 2 * 3.")
+  let goals = parse_query_text("X is 1 + 2 * 3.")
   inspect(goals.length(), content="1")
   let t = goals[0]
   guard t
@@ -15,7 +15,7 @@ test "operator precedence parsing" {
 
 ///|
 test "left associativity of plus" {
-  let goals = parse_query_text("?- X is 1 + 2 + 3.")
+  let goals = parse_query_text("X is 1 + 2 + 3.")
   let t = goals[0]
   guard t
     is Compound(
@@ -28,7 +28,7 @@ test "left associativity of plus" {
 
 ///|
 test "list sugar parsing" {
-  let goals = parse_query_text("?- X = [a, b | T].")
+  let goals = parse_query_text("X = [a, b | T].")
   let t = goals[0]
   guard t
     is Compound(
@@ -40,7 +40,7 @@ test "list sugar parsing" {
     ) else {
     fail("unexpected parse tree")
   }
-  let empty = parse_query_text("?- X = [].")
+  let empty = parse_query_text("X = [].")
   guard empty[0] is Compound("=", [_, Atom("[]")]) else {
     fail("empty list should be [] atom")
   }
@@ -48,7 +48,7 @@ test "list sugar parsing" {
 
 ///|
 test "anonymous variables are distinct" {
-  let goals = parse_query_text("?- p(_, _).")
+  let goals = parse_query_text("p(_, _).")
   let t = goals[0]
   guard t is Compound("p", [Var(a), Var(b)]) && a != b else {
     fail("anonymous variables must be distinct")
@@ -66,7 +66,7 @@ test "reversed list program (nrev)" {
   )
   let session = Session::new(db)
   let out = StringBuilder()
-  answers_string(session, "?- nrev([1, 2, 3, 4], X).", out)
+  answers_string(session, "nrev([1, 2, 3, 4], X).", out)
   |> inspect(content="X = [4,3,2,1]")
 }
 
@@ -81,7 +81,7 @@ test "factorial recursion" {
   )
   let session = Session::new(db)
   let out = StringBuilder()
-  answers_string(session, "?- fact(5, F).", out) |> inspect(content="F = 120")
+  answers_string(session, "fact(5, F).", out) |> inspect(content="F = 120")
 }
 
 ///|
@@ -96,7 +96,7 @@ test "fibonacci" {
   )
   let session = Session::new(db)
   let out = StringBuilder()
-  answers_string(session, "?- fib(10, F).", out) |> inspect(content="F = 55")
+  answers_string(session, "fib(10, F).", out) |> inspect(content="F = 55")
 }
 
 ///|
@@ -109,10 +109,9 @@ test ": with concrete list and predicate" {
   )
   let session = Session::new(db)
   let out = StringBuilder()
-  answers_string(session, "?- has(a, [b, a, c]).", out)
-  |> inspect(content="true")
+  answers_string(session, "has(a, [b, a, c]).", out) |> inspect(content="true")
   let out2 = StringBuilder()
-  answers_string(session, "?- has(z, [b, a, c]).", out2)
+  answers_string(session, "has(z, [b, a, c]).", out2)
   |> inspect(content="false")
 }
 
@@ -126,7 +125,7 @@ test "findall with arithmetic goal" {
   )
   let session = Session::new(db)
   let out = StringBuilder()
-  answers_string(session, "?- findall(X, (X = 1 ; X = 2 ; X = 3), L).", out)
+  answers_string(session, "findall(X, (X = 1 ; X = 2 ; X = 3), L).", out)
   |> inspect(content="L = [1,2,3]")
 }
 
@@ -140,16 +139,16 @@ test "deep unification with repeated variables" {
   )
   let session = Session::new(db)
   let out = StringBuilder()
-  answers_string(session, "?- pair(f(a, b), f(a, b)).", out)
+  answers_string(session, "pair(f(a, b), f(a, b)).", out)
   |> inspect(content="true")
   let out2 = StringBuilder()
-  answers_string(session, "?- pair(f(a, b), f(a, c)).", out2)
+  answers_string(session, "pair(f(a, b), f(a, c)).", out2)
   |> inspect(content="false")
 }
 
 ///|
 test "quoted atom functor" {
-  let goals = parse_query_text("?- 'hello world'(a).")
+  let goals = parse_query_text("'hello world'(a).")
   guard goals[0] is Compound("hello world", [Atom("a")]) else {
     fail("quoted functor not parsed")
   }
@@ -159,6 +158,6 @@ test "quoted atom functor" {
 test "write shows operator terms" {
   let session = Session::new(Database::new())
   let out = StringBuilder()
-  answers_string(session, "?- write(2 + 3).", out) |> inspect(content="true")
+  answers_string(session, "write(2 + 3).", out) |> inspect(content="true")
   out.to_string() |> inspect(content="2+3")
 }

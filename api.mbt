@@ -5,7 +5,7 @@
 /// ```
 /// let db = program_from_text("parent(tom, bob). parent(bob, ann). grandparent(X, Y) :- parent(X, Z), parent(Z, Y).")
 /// let session = Session::new(db)
-/// inspect(answers_string(session, "?- grandparent(tom, Who)."))
+/// inspect(answers_string(session, "grandparent(tom, Who)."))
 /// ```
 pub fn program_from_text(src : String) -> Database raise LoveError {
   let clauses = parse_program_text(src)

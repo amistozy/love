@@ -58,12 +58,6 @@ pub fn parse_clause_text(src : String) -> Clause raise LoveError {
 pub fn parse_query_text(src : String) -> Array[Term] raise LoveError {
   let tokens = lex(src)
   let p = { tokens, pos: 0, anon: 0 }
-  match p.peek() {
-    Token::Symbol("?-") => {
-      let _ = p.advance()
-    }
-    _ => ()
-  }
   let t = p.parse_term(1300)
   let goals = flatten(t)
   match p.peek() {
