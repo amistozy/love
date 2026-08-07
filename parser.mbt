@@ -246,6 +246,14 @@ fn Parser::parse_primary(self : Parser) -> Term raise LoveError {
       let _ = self.advance()
       Atom("!")
     }
+    Token::Symbol(s) if is_op_name(s) => {
+      // 函数记法：运算符名作复合项 functor，如 `+(2,3)`、`=(X, Y)`
+      let _ = self.advance()
+      match self.peek() {
+        Token::Symbol("(") => Compound(s, self.parse_args())
+        _ => raise love_error("expected a term")
+      }
+    }
     _ => raise love_error("expected a term")
   }
 }
@@ -255,6 +263,12 @@ fn Parser::parse_primary(self : Parser) -> Term raise LoveError {
 fn is_var_name(s : String) -> Bool {
   let c = s[0]
   (c >= 'A' && c <= 'Z') || c == '_'
+}
+
+///|
+/// 判断符号是否为运算符名（函数记法 `+(2,3)` 需要）
+fn is_op_name(s : String) -> Bool {
+  infix_op(s) is Some(_) || prefix_op(s) is Some(_)
 }
 
 ///|

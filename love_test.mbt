@@ -181,6 +181,23 @@ test "call meta predicate" {
 }
 
 ///|
+test "function notation and operator spacing" {
+  let session = @love.Session::new(@love.Database::new())
+  let out = StringBuilder()
+  // 函数记法 `+(2,3)` 显示为中缀 `2+3`（与 Scryer 一致）
+  @love.answers_string(session, "?- X = +(2,3).", out)
+  |> inspect(content="X = 2+3")
+  // 嵌套函数记法
+  @love.answers_string(session, "?- X = *(2,+(1,3)).", out)
+  |> inspect(content="X = 2*(1+3)")
+  // 字母类中缀运算符（is/mod）保留空格
+  @love.answers_string(session, "?- X = is(2, 3).", out)
+  |> inspect(content="X = (2 is 3)")
+  @love.answers_string(session, "?- X = mod(7, 3).", out)
+  |> inspect(content="X = 7 mod 3")
+}
+
+///|
 test "disjunction with semicolon" {
   let session = @love.Session::new(@love.Database::new())
   let out = StringBuilder()

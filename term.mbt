@@ -188,8 +188,13 @@ fn write_infix(
           }
           let left_prec = if assoc is Yfx { prec } else { prec - 1 }
           let right_prec = if assoc is Xfy { prec } else { prec - 1 }
+          // 符号类运算符紧凑（2+3）；字母类（is/mod）需空格分隔避免黏连
+          let first = name[0]
+          let pad = if first >= 97 && first <= 122 { " " } else { "" }
           write_term(l, env, sb, left_prec, quote)
+          sb.write_string(pad)
           sb.write_string(name)
+          sb.write_string(pad)
           write_term(r, env, sb, right_prec, quote)
           if paren {
             sb.write_char(')')
