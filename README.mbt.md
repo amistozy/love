@@ -9,8 +9,8 @@ Love 是一个逻辑编程（logic programming）语言，语法与语义遵循 
 ## 快速开始
 
 ```bash
-moon test                 # 运行全部测试（36 个）
-moon run --target native cmd/main   # 启动 REPL
+moon test              # 运行全部测试（36 个）
+moon run cmd/main      # 启动 REPL
 ```
 
 ## REPL

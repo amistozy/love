@@ -152,7 +152,8 @@ pub fn write_term(
             Some((_, _)) if args.length() == 1 =>
               write_prefix(w, env, sb, min_prec, quote)
             _ => {
-              sb.write_string(name)
+              // functor 同样要引号检查（`'foo bar'(a,b)` 需回读为引号原子）
+              write_atom(name, sb, quote)
               if args.length() > 0 {
                 sb.write_char('(')
                 for i in 0..<args.length() {
