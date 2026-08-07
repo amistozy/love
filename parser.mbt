@@ -148,29 +148,43 @@ fn peek_prefix(p : Parser) -> (String, Int, Assoc)? {
 ///|
 /// 解析项：`max_prec` 为该位置允许的最大运算符优先级
 fn Parser::parse_term(self : Parser, max_prec : Int) -> Term raise LoveError {
-  let mut left = self.parse_prefix(max_prec)
+  self.parse_term_marked(max_prec).0
+}
+
+///|
+/// 解析项并返回是否括号包裹。括号项优先级最高，后续中缀结合检查跳过它
+/// （ISO：括号隔离优先级，如 `(A ; B), C` 中 `;` 不受 `,` 结合约束）。
+fn Parser::parse_term_marked(
+  self : Parser,
+  max_prec : Int,
+) -> (Term, Bool) raise LoveError {
+  let (l0, b0) = self.parse_prefix_marked(max_prec)
+  let mut left = l0
+  let mut bracketed = b0
   for ;; {
     match peek_infix(self) {
-      None => break left
+      None => break (left, bracketed)
       Some((name, prec, assoc)) => {
         if prec > max_prec {
-          break left
+          break (left, bracketed)
         }
-        let lp = root_prec(left)
-        let left_ok = match assoc {
-          Yfx => lp <= prec
-          _ => lp < prec
-        }
+        // 括号项可被任何运算符吸收；否则按左操作数优先级检查
+        let left_ok = bracketed ||
+          (match assoc {
+            Yfx => root_prec(left) <= prec
+            _ => root_prec(left) < prec
+          })
         if !left_ok {
-          break left
+          break (left, bracketed)
         }
         let _ = self.advance()
         let right_max = match assoc {
           Xfy => prec
           _ => prec - 1
         }
-        let right = self.parse_term(right_max)
+        let (right, _) = self.parse_term_marked(right_max)
         left = Compound(name, [left, right])
+        bracketed = false
       }
     }
   }
@@ -180,7 +194,12 @@ fn Parser::parse_term(self : Parser, max_prec : Int) -> Term raise LoveError {
 /// 解析前缀运算符或基本项。
 /// 仅在 `prec <= max_prec` 时吸收（ISO：`X = \+ 1` 中 `\+` 900 超过
 /// `=` 右操作数 699 的允许范围，报语法错误；顶层 max_prec 1300 允许 let/del）。
-fn Parser::parse_prefix(self : Parser, max_prec : Int) -> Term raise LoveError {
+
+///|
+fn Parser::parse_prefix_marked(
+  self : Parser,
+  max_prec : Int,
+) -> (Term, Bool) raise LoveError {
   match peek_prefix(self) {
     Some((name, prec, assoc)) =>
       if prec <= max_prec {
@@ -189,62 +208,65 @@ fn Parser::parse_prefix(self : Parser, max_prec : Int) -> Term raise LoveError {
           Fy => prec
           _ => prec - 1
         }
-        let arg = self.parse_term(arg_max)
-        Compound(name, [arg])
+        let (arg, _) = self.parse_term_marked(arg_max)
+        (Compound(name, [arg]), false)
       } else {
-        self.parse_primary()
+        self.parse_primary_marked()
       }
-    None => self.parse_primary()
+    None => self.parse_primary_marked()
   }
 }
 
 ///|
 /// 解析基本项：原子 / 变量 / 整数 / 括号 / 列表 / `!`
-fn Parser::parse_primary(self : Parser) -> Term raise LoveError {
+
+///|
+fn Parser::parse_primary_marked(self : Parser) -> (Term, Bool) raise LoveError {
   match self.peek() {
     Token::Name(s) => {
       let _ = self.advance()
       if is_var_name(s) {
         if s is "_" {
           self.anon = self.anon + 1
-          return Var("_#\{self.anon}")
+          return (Var("_#\{self.anon}"), false)
         }
-        Var(s)
+        (Var(s), false)
       } else {
         match self.peek() {
-          Token::OpenCT => Compound(s, self.parse_args())
-          _ => Atom(s)
+          Token::OpenCT => (Compound(s, self.parse_args()), false)
+          _ => (Atom(s), false)
         }
       }
     }
     Token::Quoted(s) => {
       let _ = self.advance()
       match self.peek() {
-        Token::OpenCT => Compound(s, self.parse_args())
-        _ => Atom(s)
+        Token::OpenCT => (Compound(s, self.parse_args()), false)
+        _ => (Atom(s), false)
       }
     }
     Token::Int(n) => {
       let _ = self.advance()
-      Int(n)
+      (Int(n), false)
     }
     Token::OpenCT | Token::Symbol("(") => {
       let _ = self.advance()
       // 括号内允许任意项（含 let/del 1300）
-      let t = self.parse_term(1300)
+      let (t, _) = self.parse_term_marked(1300)
       self.expect(")")
-      t
+      // 括号项标记：后续中缀结合检查跳过它（优先级隔离）
+      (t, true)
     }
-    Token::Symbol("[") => self.parse_list()
+    Token::Symbol("[") => (self.parse_list(), false)
     Token::Symbol("!") => {
       let _ = self.advance()
-      Atom("!")
+      (Atom("!"), false)
     }
     Token::Symbol(s) if is_op_name(s) => {
       // 函数记法：运算符名作复合项 functor，如 `+(2,3)`、`=(X, Y)`
       let _ = self.advance()
       match self.peek() {
-        Token::OpenCT => Compound(s, self.parse_args())
+        Token::OpenCT => (Compound(s, self.parse_args()), false)
         _ => raise love_error("expected a term")
       }
     }
