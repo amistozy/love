@@ -9,6 +9,9 @@ pub enum Token {
   Int(Int)
   /// 符号：`:-` `,` `;` `|` `(` `)` `[` `]` `.` `!` `=` `<` `+` `-` `*` `/` 等
   Symbol(String)
+  /// 紧凑左括号（紧跟前一个 token 无空白）：`foo(` 的 `(`。
+  /// ISO open_ct——复合项 functor 必须紧跟 `(`，`foo (a)` 是语法错误。
+  OpenCT
   /// 输入结束
   Eof
 }

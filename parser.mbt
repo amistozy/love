@@ -212,7 +212,7 @@ fn Parser::parse_primary(self : Parser) -> Term raise LoveError {
         Var(s)
       } else {
         match self.peek() {
-          Token::Symbol("(") => Compound(s, self.parse_args())
+          Token::OpenCT => Compound(s, self.parse_args())
           _ => Atom(s)
         }
       }
@@ -220,7 +220,7 @@ fn Parser::parse_primary(self : Parser) -> Term raise LoveError {
     Token::Quoted(s) => {
       let _ = self.advance()
       match self.peek() {
-        Token::Symbol("(") => Compound(s, self.parse_args())
+        Token::OpenCT => Compound(s, self.parse_args())
         _ => Atom(s)
       }
     }
@@ -228,7 +228,7 @@ fn Parser::parse_primary(self : Parser) -> Term raise LoveError {
       let _ = self.advance()
       Int(n)
     }
-    Token::Symbol("(") => {
+    Token::OpenCT | Token::Symbol("(") => {
       let _ = self.advance()
       // 括号内允许任意项（含 let/del 1300）
       let t = self.parse_term(1300)
@@ -244,7 +244,7 @@ fn Parser::parse_primary(self : Parser) -> Term raise LoveError {
       // 函数记法：运算符名作复合项 functor，如 `+(2,3)`、`=(X, Y)`
       let _ = self.advance()
       match self.peek() {
-        Token::Symbol("(") => Compound(s, self.parse_args())
+        Token::OpenCT => Compound(s, self.parse_args())
         _ => raise love_error("expected a term")
       }
     }
@@ -300,9 +300,15 @@ fn Parser::parse_list(self : Parser) -> Term raise LoveError {
 }
 
 ///|
-/// 解析函数参数：`(a, b, c)`
+/// 解析函数参数：`(a, b, c)`。`(` 必须紧凑（OpenCT）——调用方只有
+/// `Token::OpenCT => Compound(s, parse_args())` 一个入口，`foo (a)` 不经过这里
 fn Parser::parse_args(self : Parser) -> Array[Term] raise LoveError {
-  self.expect("(")
+  match self.peek() {
+    Token::OpenCT => {
+      let _ = self.advance()
+    }
+    _ => raise love_error("expected '('")
+  }
   let args = []
   for ;; {
     args.push(self.parse_term(999))

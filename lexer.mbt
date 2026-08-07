@@ -28,6 +28,7 @@ fn love_error(msg : String) -> LoveError {
 pub fn lex(src : String) -> Array[Token] raise LoveError {
   let tokens = []
   let mut pos = 0
+  let mut last_end = -1
   let len = src.length()
   while pos < len {
     let c = src[pos]
@@ -66,6 +67,7 @@ pub fn lex(src : String) -> Array[Token] raise LoveError {
         pos = pos + 1
       }
       tokens.push(Token::Name(src[start:pos].to_owned()))
+      last_end = pos
       continue
     }
     // 整数
@@ -76,6 +78,7 @@ pub fn lex(src : String) -> Array[Token] raise LoveError {
       }
       let text = src[start:pos]
       tokens.push(Token::Int(parse_uint(text)))
+      last_end = pos
       continue
     }
     // 单引号原子
@@ -83,13 +86,20 @@ pub fn lex(src : String) -> Array[Token] raise LoveError {
       let (text, next) = lex_quoted(src, pos)
       tokens.push(Token::Quoted(text))
       pos = next
+      last_end = next
       continue
     }
     // 符号（最长匹配）
     match lex_symbol(src, pos) {
       Some((sym, next)) => {
-        tokens.push(Token::Symbol(sym))
+        // 紧跟前一个 token（无空白）的 `(` 是复合项 functor 的开头（ISO open_ct）
+        if sym == "(" && pos == last_end {
+          tokens.push(Token::OpenCT)
+        } else {
+          tokens.push(Token::Symbol(sym))
+        }
         pos = next
+        last_end = next
       }
       None => raise love_error("unexpected character at position \{pos}")
     }
