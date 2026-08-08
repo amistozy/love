@@ -58,6 +58,7 @@ fn prefix_ops() -> Map[String, Op] {
   {
     "\\+": { prec: 900, assoc: Fy },
     "-": { prec: 200, assoc: Fy },
+    "+": { prec: 200, assoc: Fy },
     "let": { prec: 1300, assoc: Fy },
   }
 }

@@ -72,7 +72,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 1100 xfy  ;          1000 xfy  ,
  900 fy   \+         700 xfx  = \= == \== < > =< >= =:= =\= is :
  500 yfx  + -        400 yfx  * / //   400 xfx  mod
- 200 xfy  ^          200 fy   -
+ 200 xfy  ^          200 fy   - +
 ```
 
 - `let`（1300）优先级高于 `:-`（1200），`let Head :- Body.` 无需括号。

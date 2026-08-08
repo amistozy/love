@@ -15,7 +15,7 @@ priv enum BuiltinResult {
 
 ///|
 /// 算术求值：把项在环境中求值为整数
-/// 支持 `+ - * / // mod` 及一元 `-`
+/// 支持 `+ - * / // mod` 及一元 `-`、一元 `+`
 fn eval_arith(t : Term, env : Env) -> Int raise LoveError {
   match walk(t, env) {
     Int(n) => n
@@ -24,6 +24,7 @@ fn eval_arith(t : Term, env : Env) -> Int raise LoveError {
     Compound(op, args) =>
       match (op, args) {
         ("+", [a, b]) => eval_arith(a, env) + eval_arith(b, env)
+        ("+", [a]) => eval_arith(a, env)
         ("-", [a, b]) => eval_arith(a, env) - eval_arith(b, env)
         ("-", [a]) => -eval_arith(a, env)
         ("*", [a, b]) => eval_arith(a, env) * eval_arith(b, env)

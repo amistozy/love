@@ -427,6 +427,23 @@ test "prefix operator as left operand" {
 }
 
 ///|
+test "unary plus" {
+  let session = @love.Session(@love.Database())
+  let out = StringBuilder()
+  // 一元 + 项显示
+  @love.answers_string(session, "X = +a.", out) |> inspect(content="X = +a")
+  // 算术求值：一元 + 是恒等
+  @love.answers_string(session, "X is +5.", out) |> inspect(content="X = 5")
+  // 一元 + 与一元 - 组合（fy 参数可等于）
+  @love.answers_string(session, "X is -+5.", out) |> inspect(content="X = -5")
+  @love.answers_string(session, "X is +-5.", out) |> inspect(content="X = -5")
+  // 中缀 + 不受影响
+  @love.answers_string(session, "X is 1 + 2.", out) |> inspect(content="X = 3")
+  // 一元 + 作为左操作数
+  @love.answers_string(session, "X = +a+b.", out) |> inspect(content="X = +a+b")
+}
+
+///|
 test "variable or number as goal fails" {
   let session = @love.Session(@love.Database())
   let out = StringBuilder()
