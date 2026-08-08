@@ -434,13 +434,36 @@ test "unary plus" {
   @love.answers_string(session, "X = +a.", out) |> inspect(content="X = +a")
   // 算术求值：一元 + 是恒等
   @love.answers_string(session, "X is +5.", out) |> inspect(content="X = 5")
-  // 一元 + 与一元 - 组合（fy 参数可等于）
-  @love.answers_string(session, "X is -+5.", out) |> inspect(content="X = -5")
-  @love.answers_string(session, "X is +-5.", out) |> inspect(content="X = -5")
+  // 一元 + 与一元 - 组合需空格（graphic token 合并：`-+5` 是语法错误）
+  @love.answers_string(session, "X is - +5.", out) |> inspect(content="X = -5")
+  @love.answers_string(session, "X is + -5.", out) |> inspect(content="X = -5")
+  // `-+5` 无空格：`-+` 合并为未知 graphic token，语法错误（Scryer 一致）
+  try @love.answers_string(session, "X is -+5.", out) catch {
+    @love.LoveError::Msg(_) => ()
+  } noraise {
+    _ => fail("expected to raise")
+  }
   // 中缀 + 不受影响
   @love.answers_string(session, "X is 1 + 2.", out) |> inspect(content="X = 3")
   // 一元 + 作为左操作数
   @love.answers_string(session, "X = +a+b.", out) |> inspect(content="X = +a+b")
+}
+
+///|
+test "graphic token merge" {
+  let session = @love.Session(@love.Database())
+  let out = StringBuilder()
+  // `-+5`：`-+` 合并为未知 graphic token，语法错误（Scryer: incomplete_reduction）
+  try @love.answers_string(session, "X = -+5.", out) catch {
+    @love.LoveError::Msg(_) => ()
+  } noraise {
+    _ => fail("expected -+5 to be syntax error")
+  }
+  // `- +5`：显示带空格，回读安全（Scryer: X = - +5）
+  @love.answers_string(session, "X = - +5.", out) |> inspect(content="X = - +5")
+  // 多字符运算符不受影响（`\=` 正常合并为已知运算符）
+  @love.answers_string(session, "X = (a \\= b).", out)
+  |> inspect(content="X = (a\\=b)")
 }
 
 ///|

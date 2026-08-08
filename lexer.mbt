@@ -159,30 +159,68 @@ fn lex_quoted(src : String, start : Int) -> (String, Int) raise LoveError {
 }
 
 ///|
-/// 多字符符号（按长度降序，保证最长匹配）
-let multi_symbols : Array[String] = [
-  "?-", ":-", "=:=", "=\\=", "\\==", "\\=", "==", "=<", ">=", "\\+", "//",
-]
+/// 语法符号（非运算符的 token：REPL 查询前缀、列表/括号/句号分隔符等）。
+/// 运算符（infix/prefix）的定义见 ops.mbt，此处不重复维护。
+let syntax_symbols : Array[String] = ["?-", "|", "!", "(", ")", "[", "]", "."]
 
 ///|
-/// 单字符符号
-let single_symbols : Array[String] = [
-  ",", ";", "|", "!", "(", ")", "[", "]", ".", "=", "<", ">", "+", "-", "*", "/",
-  ":", "^", "\\",
-]
+/// 判断字符是否为 graphic 字符（ISO：组成 graphic token 的符号字符，
+/// 连续的 graphic 字符会合并为一个 token）
+fn is_graphic_char(c : UInt16) -> Bool {
+  c == '#' ||
+  c == '$' ||
+  c == '&' ||
+  c == '*' ||
+  c == '+' ||
+  c == '-' ||
+  c == '.' ||
+  c == '/' ||
+  c == ':' ||
+  c == '<' ||
+  c == '=' ||
+  c == '>' ||
+  c == '?' ||
+  c == '@' ||
+  c == '^' ||
+  c == '~' ||
+  c == '\\'
+}
 
 ///|
-/// 在 pos 处尝试匹配符号，返回 (符号, 结束位置)
-fn lex_symbol(src : String, pos : Int) -> (String, Int)? {
-  for sym in multi_symbols {
-    if src[pos:].has_prefix(sym) {
-      return Some((sym, pos + sym.length()))
+/// 在 pos 处匹配符号。
+/// ISO：连续的 graphic 字符组成一个 graphic token，只接受已知运算符组合；
+/// 未知组合（如 `-+`）报语法错误，而非拆成单字符
+/// （Scryer 对 `-+5` 报 incomplete_reduction 即源于此）。
+/// solo 字符（`, ; | ! ( ) [ ]`）单独成 token。
+fn lex_symbol(src : String, pos : Int) -> (String, Int)? raise LoveError {
+  let c = src[pos]
+  if is_graphic_char(c) {
+    // graphic：合并连续的 graphic 字符为一个 token
+    let mut end = pos
+    while end < src.length() && is_graphic_char(src[end]) {
+      end = end + 1
+    }
+    let text = src[pos:end].to_owned()
+    if is_known_symbol(text) {
+      Some((text, end))
+    } else {
+      raise love_error("unexpected symbol '\{text}'")
+    }
+  } else {
+    // solo 字符：单字符符号（`,` `;` `|` `!` `(` `)` `[` `]`）
+    let s = src[pos:pos + 1].to_owned()
+    if is_known_symbol(s) {
+      Some((s, pos + 1))
+    } else {
+      None
     }
   }
-  for sym in single_symbols {
-    if src[pos:].has_prefix(sym) {
-      return Some((sym, pos + sym.length()))
-    }
-  }
-  None
+}
+
+///|
+/// 判断符号串是否为已知 token：语法符号或运算符（infix/prefix 定义在 ops.mbt）
+fn is_known_symbol(s : String) -> Bool {
+  syntax_symbols.contains(s) ||
+  infix_op(s) is Some(_) ||
+  prefix_op(s) is Some(_)
 }

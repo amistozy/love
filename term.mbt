@@ -171,6 +171,42 @@ pub fn write_term(
 }
 
 ///|
+/// 项渲染后的首字符（用于判断相邻衔接是否需要空格）。
+/// 中缀项以 left 开头，前缀项以运算符名开头，普通复合项以 functor 开头。
+fn render_first_char(t : Term, env : Env) -> UInt16 {
+  match walk(t, env) {
+    Int(_) => ('0' : UInt16)
+    Atom(a) => a[0]
+    Var(n) => n[0]
+    Compound(name, args) =>
+      if args.length() == 2 && infix_op(name) is Some(_) {
+        render_first_char(args[0], env)
+      } else {
+        name[0]
+      }
+  }
+}
+
+///|
+/// 项渲染后的末字符（用于判断相邻衔接是否需要空格）。
+/// 中缀项以 right 结尾，前缀项以参数结尾，普通复合项以最后参数结尾。
+fn render_last_char(t : Term, env : Env) -> UInt16 {
+  match walk(t, env) {
+    Int(_) => ('0' : UInt16)
+    Atom(a) => a[a.length() - 1]
+    Var(n) => n[n.length() - 1]
+    Compound(name, args) =>
+      if args.length() == 2 && infix_op(name) is Some(_) {
+        render_last_char(args[1], env)
+      } else if args.length() == 1 && prefix_op(name) is Some(_) {
+        render_last_char(args[0], env)
+      } else {
+        render_last_char(args[args.length() - 1], env)
+      }
+  }
+}
+
+///|
 /// 中缀运算符项的写出
 fn write_infix(
   w : Term,
@@ -189,14 +225,32 @@ fn write_infix(
           }
           let left_prec = if assoc is Yfx { prec } else { prec - 1 }
           let right_prec = if assoc is Xfy { prec } else { prec - 1 }
-          // 符号类运算符紧凑（2+3）；字母类（is/mod）需空格分隔避免黏连
+          // 字母类（is/mod）两侧空格；符号类相邻 graphic 字符需空格
+          // （避免 graphic token 合并导致不可回读，参照 Scryer requires_space）
           let first = name[0]
-          let pad = if first >= 97 && first <= 122 { " " } else { "" }
-          write_term(l, env, sb, left_prec, quote)
-          sb.write_string(pad)
-          sb.write_string(name)
-          sb.write_string(pad)
-          write_term(r, env, sb, right_prec, quote)
+          if first >= 97 && first <= 122 {
+            write_term(l, env, sb, left_prec, quote)
+            sb.write_string(" ")
+            sb.write_string(name)
+            sb.write_string(" ")
+            write_term(r, env, sb, right_prec, quote)
+          } else {
+            let pad_l = if is_graphic_char(render_last_char(l, env)) {
+              " "
+            } else {
+              ""
+            }
+            let pad_r = if is_graphic_char(render_first_char(r, env)) {
+              " "
+            } else {
+              ""
+            }
+            write_term(l, env, sb, left_prec, quote)
+            sb.write_string(pad_l)
+            sb.write_string(name)
+            sb.write_string(pad_r)
+            write_term(r, env, sb, right_prec, quote)
+          }
           if paren {
             sb.write_char(')')
           }
@@ -227,12 +281,16 @@ fn write_prefix(
             sb.write_char('(')
           }
           sb.write_string(name)
-          // 符号类前缀运算符（- \+）紧凑；字母类（let）需空格分隔避免黏连
+          // 字母类（let）空格；符号类参数首字符是 graphic 符号时加空格
+          // （避免 `- +5` 输出成 `-+5` 被 graphic token 合并，参照 Scryer）
+          // 参数上下文用 prec（fy 可等于）：`- +5` 中 `+`（200）不因 199 而加括号
           let first = name[0]
           if first >= 97 && first <= 122 {
             sb.write_string(" ")
+          } else if is_graphic_char(render_first_char(a, env)) {
+            sb.write_string(" ")
           }
-          write_term(a, env, sb, prec - 1, quote)
+          write_term(a, env, sb, prec, quote)
           if paren {
             sb.write_char(')')
           }
