@@ -1,9 +1,6 @@
 # Love：用 MoonBit 实现的迷你 Prolog
 
-Love 是一个用 [MoonBit](https://docs.moonbitlang.com) 实现的类 Prolog 逻辑编程
-语言。它遵循 Prolog 的核心模型：程序由**子句**（事实与规则）构成，查询通过
-**合一**与**带回溯的 SLD 解析**求解，并附带交互式 REPL。实现针对教学场景做了
-简化，但保留了核心语义。
+Love 是一个用 [MoonBit](https://docs.moonbitlang.com) 实现的类 Prolog 逻辑编程语言。它遵循 Prolog 的核心模型：程序由**子句**（事实与规则）构成，查询通过**合一**与**带回溯的 SLD 解析**求解，并附带交互式 REPL。实现针对教学场景做了简化，但保留了核心语义。
 
 ## 特性
 
@@ -86,13 +83,11 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 ### 语义
 
 - **合一**：持久化不可变 HashMap + occurs check（`X = f(X)` 失败）。
-- **SLD 解析**：深度优先、最左目标、按子句书写顺序尝试；显式选择点栈支持
-  逐解产出（`next_solution`）与无限程序（`length(L, N)` 逐解枚举）。
+- **SLD 解析**：深度优先、最左目标、按子句书写顺序尝试；显式选择点栈支持逐解产出（`next_solution`）与无限程序（`length(L, N)` 逐解枚举）。
 - **cut（`!`）**：截断选择点栈到当前子句进入时的高度，剪除替代分支。
 - **否定即失败**：`\+ Goal` 子目标有解则失败，无解则成功（复用 `call/1`）。
 - **未绑定变量/数字不能作为目标**（如 `?- X.`、`?- 1.`），返回 `false.`。
-- **紧凑输出**：列表 `[1,2,3]`、`2+3`、`-5`、`\+foo` 无多余空格；字母类运算符
-  （`is`/`mod`）保留空格避免黏连；非标识符 functor 自动加引号。
+- **紧凑输出**：列表 `[1,2,3]`、`2+3`、`-5`、`\+foo` 无多余空格；字母类运算符（`is`/`mod`）保留空格避免黏连；非标识符 functor 自动加引号。
 
 ## 内建谓词
 
@@ -100,8 +95,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 - 合一/比较：`=/2`、`\=/2`、`==/2`、`\==/2`
 - 项检查：`var/1`、`nonvar/1`、`atom/1`、`integer/1`、`atomic/1`、`compound/1`、`ground/1`
 - 算术：`is/2`、`=:=/2`、`=\=/2`、`</2`、`>/2`、`=</2`、`>=/2`、`between/3`
-- 列表：`:/2`（`X : [1,2,3]` 中缀成员）、`length/2`（双向）、`append/3`、
-  `sort/2`（标准项序排序去重）、`keysort/2`（按键稳定排序，不去重）
+- 列表：`:/2`（`X : [1,2,3]` 中缀成员）、`length/2`（双向）、`append/3`、`sort/2`（标准项序排序去重）、`keysort/2`（按键稳定排序，不去重）
 - 元编程：`findall/3`、`bagof/3`（按 witness 分组）、`setof/3`（排序去重）、`^/2`
 - 动态数据库：`let/1`（断言）、`del/1`（按 `Name/Arity` 删除全部子句）
 - 会话：`cls/0`（清屏）、`halt/0`（退出）、`consult/1`（加载 `name.love`）
@@ -181,8 +175,4 @@ moon test          # 36 个测试
 moon coverage analyze > uncovered.log   # 查看未覆盖代码
 ```
 
-覆盖解析（运算符优先级、函数记法、OpenCT 紧凑括号、列表糖、括号隔离）、合一
-（occurs check）、经典递归（nrev/factorial/fibonacci）、cut 语义、否定即失败、
-call、findall/bagof/setof（分组/排序去重/`^` 量化）、sort/keysort、动态数据库
-（let/del）、会话谓词（cls/halt/consult）、变量/数字目标失败、紧凑输出与括号
-可回读等。
+覆盖解析（运算符优先级、函数记法、OpenCT 紧凑括号、列表糖、括号隔离）、合一（occurs check）、经典递归（nrev/factorial/fibonacci）、cut 语义、否定即失败、call、findall/bagof/setof（分组/排序去重/`^` 量化）、sort/keysort、动态数据库（let/del）、会话谓词（cls/halt/consult）、变量/数字目标失败、紧凑输出与括号可回读等。
