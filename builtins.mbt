@@ -631,6 +631,17 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
         _ => Fail
       }
     },
+    "listing/0": (_args, e) => {
+      // 列出数据库中全部子句到会话输出缓冲（每行一个子句）；
+      // 空数据库时无输出但成功
+      for c in e.session.db.all_clauses() {
+        e.session.output.write_string(
+          clause_to_string(c.head, c.body.to_array()),
+        )
+        e.session.output.write_string("\n")
+      }
+      Succeed
+    },
     "listing/1": (args, e) => {
       // 列出谓词 `Name/Arity` 的全部子句到会话输出缓冲（如 `listing(foo/2).`），
       // 每行一个子句（事实 `Head.`、规则 `Head :- Body.`）；无该谓词时失败

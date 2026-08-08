@@ -73,6 +73,13 @@ pub fn Database::clear(self : Database) -> Unit {
 }
 
 ///|
+/// 遍历数据库中全部子句（按谓词插入顺序）。
+/// 惰性迭代器：不物化中间数组，调用方按需消费。
+pub fn Database::all_clauses(self : Database) -> Iter[Clause] {
+  self.procs.values().flat_map(clauses => clauses.iter())
+}
+
+///|
 /// 会话：数据库、变量重命名计数器、输出缓冲（write 内建写入）。
 /// 嵌套求解（findall / \+）共享会话，因此输出与命名保持一致。
 /// 抽象类型：外部通过 `new`/`drain_output`/`halt_requested` 等公开方法交互。

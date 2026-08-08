@@ -98,7 +98,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 - 算术：`is/2`、`=:=/2`、`=\=/2`、`</2`、`>/2`、`=</2`、`>=/2`、`between/3`
 - 列表：`:/2`（`X : [1,2,3]` 中缀成员）、`length/2`（双向）、`append/3`、`sort/2`（标准项序排序去重）、`keysort/2`（按键稳定排序，不去重）
 - 元编程：`findall/3`、`bagof/3`（按 witness 分组）、`setof/3`（排序去重）、`^/2`
-- 动态数据库：`let/1`（断言）、`del/1`（按 `Name/Arity` 删除全部子句）、`del/0`（清空数据库）、`listing/1`（列出谓词定义）
+- 动态数据库：`let/1`（断言）、`del/1`（按 `Name/Arity` 删除全部子句）、`del/0`（清空数据库）、`listing/0`（列出全部子句）、`listing/1`（列出谓词定义）
 - 会话：`cls/0`（清屏）、`halt/0`（退出）、`consult/1`（加载 `name.love`）
 - 输出：`write/1`、`writeln/1`、`nl/0`
 - 字符串：`atom_length/2`、`char_code/2`

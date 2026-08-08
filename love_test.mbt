@@ -378,6 +378,22 @@ test "listing builtin" {
 }
 
 ///|
+test "listing all builtin" {
+  let session = @love.Session(@love.Database())
+  let out = StringBuilder()
+  // 空数据库：成功，无输出
+  @love.answers_string(session, "listing.", out) |> inspect(content="true")
+  out.to_string() |> inspect(content="")
+  // 断言多个谓词
+  @love.answers_string(session, "let p(1).", out) |> inspect(content="true")
+  @love.answers_string(session, "let q(X) :- X = 1.", out)
+  |> inspect(content="true")
+  // 列出全部子句（按谓词插入顺序；符号运算符紧凑输出 `X=1`）
+  @love.answers_string(session, "listing.", out) |> inspect(content="true")
+  out.to_string() |> inspect(content="p(1).\nq(X) :- X=1.\n")
+}
+
+///|
 test "let asserts a single clause" {
   let session = @love.Session(@love.Database())
   let out = StringBuilder()
