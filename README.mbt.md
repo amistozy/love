@@ -9,7 +9,7 @@ Love 是一个用 [MoonBit](https://docs.moonbitlang.com) 实现的类 Prolog �
 - **显式回溯**：选择点栈驱动的深度优先 SLD 解析，支持逐解枚举与无限程序
 - **核心控制结构**：cut、否定即失败（`\+`）、`call/1`、析取
 - **丰富内建谓词**：算术、列表、元编程（findall/bagof/setof）、动态数据库、会话控制
-- **交互式 REPL**：逐解交互、预读自动收尾、`let`/`del`/`consult` 便利谓词
+- **交互式 REPL**：逐解交互、预读自动收尾、`let`/`~`/`+` 便利谓词
 
 ## 快速开始
 
@@ -36,10 +36,10 @@ X = 1.          % 单解直接结束，无需输入分号/句号
 |---|---|
 | `;` 查看下一个解 | 行尾显示 ` ;`，最后一个解自动以 `.` 收尾；无更多解打印 `false.` |
 | `let Head.` / `let Head :- Body.` | 断言事实/规则到数据库 |
-| `del(foo/2).` | 按谓词指示符删除 `foo/2` 的全部子句 |
+| `~foo/2.` | 按谓词指示符删除 `foo/2` 的全部子句 |
 | `del.` | 清空动态数据库（删除全部子句） |
 | `cls.` | 清屏（静默，无输出） |
-| `[name].` | 导入 `name.love`（`consult(name).` 的语法糖） |
+| `+name.` | 导入 `name.love` |
 | `halt.` | 退出 |
 
 多行输入：输入不以 `.` 结束时用 ` | ` 续行。
@@ -67,7 +67,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 ### 运算符（优先级数字越大越松散）
 
 ```
-1300 fy   let
+1300 fy   let ~
 1200 xfx  :-
 1100 xfy  ;          1000 xfy  ,
  900 fy   \+         700 xfx  = \= == \== < > =< >= =:= =\= is :
@@ -75,7 +75,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
  200 xfy  ^          200 fy   - +
 ```
 
-- `let`（1300）优先级高于 `:-`（1200），`let Head :- Body.` 无需括号。
+- `let`/`~`（1300）优先级高于 `:-`（1200）与 `/`（700）：`let Head :- Body.` 无需括号；`~foo/2.` 中 `~` 吸收谓词指示符。`+file.`（`+` 一元前缀）导入文件。
 - `^`（200 xfy）是 bagof/setof 的存在量词运算符。
 - 运算符名可作复合项 functor（函数记法）：`+(2,3)` 解析为 `2+3`；运算符名后紧跟 `(`（OpenCT）时按函数记法解析、不作为前缀运算符——`let(foo), X = 1.` 中 `,` 是目标分隔符（对照 `let (foo), X = 1.` 中 `,` 是 `let` 的参数）。
 - 复合项 functor 必须紧跟 `(`：`foo(a)` 是复合项，`foo (a)` 是语法错误。
@@ -98,8 +98,8 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 - 算术：`is/2`、`=:=/2`、`=\=/2`、`</2`、`>/2`、`=</2`、`>=/2`、`between/3`
 - 列表：`:/2`（`X : [1,2,3]` 中缀成员）、`length/2`（双向）、`append/3`、`sort/2`（标准项序排序去重）、`keysort/2`（按键稳定排序，不去重）
 - 元编程：`findall/3`、`bagof/3`（按 witness 分组）、`setof/3`（排序去重）、`^/2`
-- 动态数据库：`let/1`（断言）、`del/1`（按 `Name/Arity` 删除全部子句）、`del/0`（清空数据库）、`listing/0`（列出全部子句）、`listing/1`（列出谓词定义）
-- 会话：`cls/0`（清屏）、`halt/0`（退出）、`consult/1`（加载 `name.love`）
+- 动态数据库：`let/1`（断言）、`~/1`（按 `Name/Arity` 删除全部子句）、`del/0`（清空数据库）、`listing/0`（列出全部子句）、`listing/1`（列出谓词定义）
+- 会话：`cls/0`（清屏）、`halt/0`（退出）、`+/1`（加载 `name.love`，即 `+name.`）
 - 输出：`write/1`、`writeln/1`、`nl/0`
 - 字符串：`atom_length/2`、`char_code/2`
 
@@ -176,4 +176,4 @@ moon test          # 36 个测试
 moon coverage analyze > uncovered.log   # 查看未覆盖代码
 ```
 
-覆盖解析（运算符优先级、函数记法、OpenCT 紧凑括号、列表糖、括号隔离）、合一（occurs check）、经典递归（nrev/factorial/fibonacci）、cut 语义、否定即失败、call、findall/bagof/setof（分组/排序去重/`^` 量化）、sort/keysort、动态数据库（let/del）、会话谓词（cls/halt/consult）、变量/数字目标失败、紧凑输出与括号可回读等。
+覆盖解析（运算符优先级、函数记法、OpenCT 紧凑括号、列表糖、括号隔离）、合一（occurs check）、经典递归（nrev/factorial/fibonacci）、cut 语义、否定即失败、call、findall/bagof/setof（分组/排序去重/`^` 量化）、sort/keysort、动态数据库（let/~）、会话谓词（cls/halt/+）、变量/数字目标失败、紧凑输出与括号可回读等。

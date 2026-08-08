@@ -26,7 +26,7 @@ pub fn load_program(db : Database, src : String) -> Unit raise LoveError {
 }
 
 ///|
-/// 把程序文本加载进会话的数据库（`[file].` 导入用）
+/// 把程序文本加载进会话的数据库（`+file.` 导入用）
 pub fn load_text(session : Session, src : String) -> Unit raise LoveError {
   load_program(session.db, src)
 }

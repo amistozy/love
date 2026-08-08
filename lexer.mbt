@@ -161,7 +161,7 @@ fn lex_quoted(src : String, start : Int) -> (String, Int) raise LoveError {
 ///|
 /// 语法符号（非运算符的 token：REPL 查询前缀、列表/括号/句号分隔符等）。
 /// 运算符（infix/prefix）的定义见 ops.mbt，此处不重复维护。
-let syntax_symbols : Array[String] = ["?-", "|", "!", "(", ")", "[", "]", "."]
+let syntax_symbols : Array[String] = ["|", "!", "(", ")", "[", "]", "."]
 
 ///|
 /// 判断字符是否为 graphic 字符（ISO：组成 graphic token 的符号字符，

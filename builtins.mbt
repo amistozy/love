@@ -620,8 +620,8 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
       e.session.db.clear()
       Succeed
     },
-    "del/1": (args, e) => {
-      // 删除谓词指示符 `Name/Arity` 对应的全部子句（如 `del(foo/2).`）
+    "~/1": (args, e) => {
+      // 删除谓词指示符 `Name/Arity` 对应的全部子句（如 `~foo/2.`）
       guard args is [t] else { Fail }
       match walk_deep(t, @hashmap.HashMap::new()) {
         Compound("/", [Atom(name), Int(arity)]) =>
@@ -681,7 +681,8 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
       _e.session.halt = true
       Succeed
     },
-    "consult/1": (args, e) => {
+    "+/1": (args, e) => {
+      // `+file.`：读取 `file.love` 并加载子句（`+` 是一元前缀运算符）
       guard args is [t] else { Fail }
       match walk(t, e.env) {
         Atom(name) => consult_load(e, name)
@@ -693,7 +694,7 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
 }
 
 ///|
-/// `consult/1` 的实现：读取 `name.love` 并把子句加载进数据库
+/// `+/1` 的实现：读取 `name.love` 并把子句加载进数据库
 fn consult_load(e : Engine, name : String) -> BuiltinResult {
   let path = name + ".love"
   match read_file_safe(path) {

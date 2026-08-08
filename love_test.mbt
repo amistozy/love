@@ -333,21 +333,20 @@ test "let and del builtins" {
   // 查询断言结果
   @love.answers_string(session, "parent(tom, X).", out)
   |> inspect(content="X = bob")
-  // 按谓词指示符删除全部子句（函数记法）
-  @love.answers_string(session, "del(parent/2).", out)
-  |> inspect(content="true")
+  // 按谓词指示符删除全部子句（`~` 前缀运算符，如 `~foo/2.`）
+  @love.answers_string(session, "~parent/2.", out) |> inspect(content="true")
   @love.answers_string(session, "parent(tom, X).", out)
   |> inspect(content="false")
   // 删除不存在的谓词失败
-  @love.answers_string(session, "del(nope/3).", out) |> inspect(content="false")
+  @love.answers_string(session, "~nope/3.", out) |> inspect(content="false")
   // 非谓词指示符参数失败
-  @love.answers_string(session, "del(parent(x, y)).", out)
+  @love.answers_string(session, "~parent(x, y).", out)
   |> inspect(content="false")
   // del/0：清空动态数据库（删除全部子句）
   @love.answers_string(session, "let q(1).", out) |> inspect(content="true")
   @love.answers_string(session, "del.", out) |> inspect(content="true")
   @love.answers_string(session, "q(1).", out) |> inspect(content="false")
-  // del 不再作为运算符：旧前缀语法 `del q/1.` 报语法错误
+  // `del` 不再是运算符（已改名为 `~`）：`del q/1.` 报语法错误
   try @love.answers_string(session, "del q/1.", out) catch {
     @love.LoveError::Msg(_) => ()
   } noraise {
@@ -484,7 +483,31 @@ test "variable or number as goal fails" {
 }
 
 ///|
-test "cls halt consult builtins" {
+test "tilde and plus operators" {
+  let session = @love.Session(@love.Database())
+  let out = StringBuilder()
+  // `~foo/2.`：`~` 前缀运算符（1300 fy）吸收谓词指示符并删除
+  @love.answers_string(session, "let p(1).", out) |> inspect(content="true")
+  @love.answers_string(session, "~p/1.", out) |> inspect(content="true")
+  @love.answers_string(session, "p(1).", out) |> inspect(content="false")
+  // 未定义谓词失败
+  @love.answers_string(session, "~nope/1.", out) |> inspect(content="false")
+  // `~(q/1).`：OpenCT 函数记法仍可用
+  @love.answers_string(session, "let q(1).", out) |> inspect(content="true")
+  @love.answers_string(session, "~(q/1).", out) |> inspect(content="true")
+  @love.answers_string(session, "q(1).", out) |> inspect(content="false")
+  // `+file.`：`+` 一元前缀导入文件
+  let _ = @fs.write_string_to_file("love_plus_test.love", "r(a). r(b).")
+  @love.answers_string(session, "+love_plus_test.", out)
+  |> inspect(content="true")
+  @love.answers_string(session, "r(X).", out) |> inspect(content="X = a; X = b")
+  let _ = @fs.remove_file("love_plus_test.love")
+  // `[file].` 语法糖已删除：按普通查询（单元素列表）求解失败
+  @love.answers_string(session, "[family].", out) |> inspect(content="false")
+}
+
+///|
+test "cls halt plus file builtins" {
   let session = @love.Session(@love.Database())
   let out = StringBuilder()
   // cls/0：把 ANSI 清屏序列写入输出缓冲
@@ -493,17 +516,17 @@ test "cls halt consult builtins" {
   // halt/0：请求退出（不真正终止测试）
   @love.answers_string(session, "halt.", out) |> inspect(content="true")
   session.halt_requested() |> inspect(content="true")
-  // consult/1：读取 `.love` 文件并加载子句
+  // +/1：读取 `.love` 文件并加载子句（`+file.`，`+` 是一元前缀运算符）
   let _ = @fs.write_string_to_file("love_consult_test.love", "p(a). p(b).")
-  @love.answers_string(session, "consult(love_consult_test).", out)
+  @love.answers_string(session, "+love_consult_test.", out)
   |> inspect(content="true")
   @love.answers_string(session, "p(X).", out) |> inspect(content="X = a; X = b")
-  // 语法错误的文件 → consult 失败
+  // 语法错误的文件 → 导入失败
   let _ = @fs.write_string_to_file("love_consult_bad.love", "broken(")
-  @love.answers_string(session, "consult(love_consult_bad).", out)
+  @love.answers_string(session, "+love_consult_bad.", out)
   |> inspect(content="false")
-  // 文件不存在 → consult 失败
-  @love.answers_string(session, "consult(no_such_file_xyz).", out)
+  // 文件不存在 → 导入失败
+  @love.answers_string(session, "+no_such_file_xyz.", out)
   |> inspect(content="false")
   // 清理临时文件
   let _ = @fs.remove_file("love_consult_test.love")

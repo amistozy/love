@@ -2,11 +2,11 @@
 /// Love REPL：交互式解释器入口。
 ///
 /// - 提示符 `?- ` 后直接输入查询目标，如 `X : [1,2,3].`
-/// - `let` / `del` / `cls` / `halt` / `consult` 均为内建谓词：
+/// - `let` / `~` / `+` / `cls` / `halt` 均为内建谓词：
 ///   - `let Head.` / `let Head :- Body.` 断言子句
-///   - `del(foo/2).` 删除谓词，`del.` 清空数据库
+///   - `~foo/2.` 删除谓词，`del.` 清空数据库
 ///   - `cls.` 清屏，`halt.` 退出
-///   - `consult(family).` 或 `[family].` 导入 `family.love`
+///   - `+family.` 导入 `family.love`
 /// - 查询答案后输入 `;` 查看下一个解，`.` 或回车结束
 async fn main {
   let db = @love.Database()
@@ -15,8 +15,8 @@ async fn main {
     #|Love 1.0 - a little Prolog. Enter a query directly (end with '.').
     #|  query:   X : [1,2,3].
     #|  define:  let parent(tom, bob).
-    #|  remove:  del(foo/2).  clear-all:  del.
-    #|  clear:   cls.         load:       [file].
+    #|  remove:  ~foo/2.       clear-all:  del.
+    #|  clear:   cls.          load:       +file.
     #|  quit:    halt.
     #|
   @stdio.stdout.write(banner)
@@ -48,18 +48,7 @@ async fn main {
       continue
     }
     // 查询（含内建谓词）可能抛出 LoveError，统一在此捕获
-    try {
-      // `[name].` 是 `consult(name).` 的语法糖（参考 Scryer toplevel.pl 的
-      // instruction_match：读入的单元素列表且元素为原子时转成 consult 查询）
-      let is_consult = match @love.parse_query_text(t) {
-        More(Compound(".", [Atom(name), Atom("[]")]), tail=Empty) => Some(name)
-        _ => None
-      }
-      match is_consult {
-        Some(name) => run_query(session, "consult(\{name}).")
-        None => run_query(session, t)
-      }
-    } catch {
+    try run_query(session, t) catch {
       @love.LoveError::Msg(m) => @stdio.stdout.write("error: \{m}\n\n")
       _ => @stdio.stdout.write("error: unexpected failure\n\n")
     } noraise {
