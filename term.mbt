@@ -35,9 +35,10 @@ pub fn collect_vars(t : Term, out : Array[String]) -> Unit {
 }
 
 ///|
-/// 判断原子是否需要引号才能正确回读：
-/// 合法裸原子为小写字母开头的标识符，且非运算符名（`is`/`mod`/`not` 等
-/// 在参数位置可能产生歧义，统一加引号保证回读正确）。
+/// 判断原子是否需要引号才能正确回读。
+/// 参照 Scryer non_quoted_token：graphic token、小写标识符、`!`、`;`、`[]` 无需引号。
+/// 运算符名（如 `\+`、`is`）是合法裸 token，不加引号——函数记法 `\+(a,b)`、
+/// 参数位置 `X = \+` 均可正确回读（`\+` 在低优先级上下文不被当作前缀吸收）。
 fn atom_needs_quote(s : String) -> Bool {
   if s.is_empty() {
     return true
@@ -46,19 +47,36 @@ fn atom_needs_quote(s : String) -> Bool {
     // 空列表是合法的裸原子
     return false
   }
-  if !(s[0] is ('a'..='z')) {
-    return true
+  if s is "!" || s is ";" {
+    return false
   }
-  for i in 0..<s.length() {
-    let c = s[i]
-    if !(c is ('a'..='z' | 'A'..='Z' | '0'..='9' | '_')) {
+  let c0 = s[0]
+  if c0 is ('a'..='z') {
+    // 小写标识符：全部为字母数字或下划线
+    for i in 0..<s.length() {
+      let c = s[i]
+      if !(c is ('a'..='z' | 'A'..='Z' | '0'..='9' | '_')) {
+        return true
+      }
+    }
+    return false
+  }
+  if is_graphic_char(c0) {
+    // graphic token：全部为 graphic 字符；`/` 后不能是 `*`（注释）、`.` 不能单独（句号）
+    if c0 == '/' && s.length() > 1 && s[1] is '*' {
       return true
     }
+    if c0 == '.' && s.length() == 1 {
+      return true
+    }
+    for i in 0..<s.length() {
+      if !is_graphic_char(s[i]) {
+        return true
+      }
+    }
+    return false
   }
-  if infix_op(s) is Some(_) || prefix_op(s) is Some(_) {
-    return true
-  }
-  false
+  true
 }
 
 ///|
@@ -172,15 +190,26 @@ pub fn write_term(
 
 ///|
 /// 项渲染后的首字符（用于判断相邻衔接是否需要空格）。
-/// 中缀项以 left 开头，前缀项以运算符名开头，普通复合项以 functor 开头。
-fn render_first_char(t : Term, env : Env) -> UInt16 {
+/// 中缀项以 left 开头，前缀项以运算符名开头，普通复合项以 functor 开头；
+/// 因优先级加括号时以 `(` 开头。
+fn render_first_char(t : Term, env : Env, min_prec : Int) -> UInt16 {
   match walk(t, env) {
     Int(_) => ('0' : UInt16)
     Atom(a) => a[0]
     Var(n) => n[0]
     Compound(name, args) =>
-      if args.length() == 2 && infix_op(name) is Some(_) {
-        render_first_char(args[0], env)
+      if args.length() == 2 && infix_op(name) is Some((p, _)) {
+        if p > min_prec {
+          '('
+        } else {
+          render_first_char(args[0], env, min_prec)
+        }
+      } else if args.length() == 1 && prefix_op(name) is Some((p, _)) {
+        if p > min_prec {
+          '('
+        } else {
+          name[0]
+        }
       } else {
         name[0]
       }
@@ -189,19 +218,28 @@ fn render_first_char(t : Term, env : Env) -> UInt16 {
 
 ///|
 /// 项渲染后的末字符（用于判断相邻衔接是否需要空格）。
-/// 中缀项以 right 结尾，前缀项以参数结尾，普通复合项以最后参数结尾。
-fn render_last_char(t : Term, env : Env) -> UInt16 {
+/// 中缀项以 right 结尾，前缀项以参数结尾，普通复合项以最后参数结尾；
+/// 因优先级加括号时以 `)` 结尾。
+fn render_last_char(t : Term, env : Env, min_prec : Int) -> UInt16 {
   match walk(t, env) {
     Int(_) => ('0' : UInt16)
     Atom(a) => a[a.length() - 1]
     Var(n) => n[n.length() - 1]
     Compound(name, args) =>
-      if args.length() == 2 && infix_op(name) is Some(_) {
-        render_last_char(args[1], env)
-      } else if args.length() == 1 && prefix_op(name) is Some(_) {
-        render_last_char(args[0], env)
+      if args.length() == 2 && infix_op(name) is Some((p, _)) {
+        if p > min_prec {
+          ')'
+        } else {
+          render_last_char(args[1], env, min_prec)
+        }
+      } else if args.length() == 1 && prefix_op(name) is Some((p, _)) {
+        if p > min_prec {
+          ')'
+        } else {
+          render_last_char(args[0], env, min_prec)
+        }
       } else {
-        render_last_char(args[args.length() - 1], env)
+        render_last_char(args[args.length() - 1], env, min_prec)
       }
   }
 }
@@ -235,12 +273,16 @@ fn write_infix(
             sb.write_string(" ")
             write_term(r, env, sb, right_prec, quote)
           } else {
-            let pad_l = if is_graphic_char(render_last_char(l, env)) {
+            // 相邻两侧都 graphic 才需空格（参照 Scryer requires_space）：
+            // `a,\+b` 中 `,` 是 solo 字符不合并；`a- \+b` 中 `-` 与 `\+` 都是 graphic
+            let pad_l = if is_graphic_char(render_last_char(l, env, left_prec)) &&
+              is_graphic_char(first) {
               " "
             } else {
               ""
             }
-            let pad_r = if is_graphic_char(render_first_char(r, env)) {
+            let pad_r = if is_graphic_char(name[name.length() - 1]) &&
+              is_graphic_char(render_first_char(r, env, right_prec)) {
               " "
             } else {
               ""
@@ -281,14 +323,17 @@ fn write_prefix(
             sb.write_char('(')
           }
           sb.write_string(name)
-          // 字母类（let）空格；符号类参数首字符是 graphic 符号时加空格
-          // （避免 `- +5` 输出成 `-+5` 被 graphic token 合并，参照 Scryer）
-          // 参数上下文用 prec（fy 可等于）：`- +5` 中 `+`（200）不因 199 而加括号
+          // 字母类（let）空格；符号类参数首字符是 graphic 符号或 `(`（括号项）时
+          // 加空格：`- +5` 避免 graphic token 合并；`\+ (a, \+b)` 避免被回读为
+          // 函数记法 `\+(a, \+b)`（OpenCT）。参数上下文用 prec（fy 可等于）。
           let first = name[0]
           if first >= 97 && first <= 122 {
             sb.write_string(" ")
-          } else if is_graphic_char(render_first_char(a, env)) {
-            sb.write_string(" ")
+          } else {
+            let af = render_first_char(a, env, prec)
+            if is_graphic_char(af) || af == ('(' : UInt16) {
+              sb.write_string(" ")
+            }
           }
           write_term(a, env, sb, prec, quote)
           if paren {

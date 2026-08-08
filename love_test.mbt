@@ -466,6 +466,23 @@ test "graphic token merge" {
 }
 
 ///|
+test "backslash-plus display" {
+  let session = @love.Session(@love.Database())
+  let out = StringBuilder()
+  // Scryer: X = (\+ (a, \+ b)) -> X = (\+ (a,\+b))
+  // `\+` 前缀 + 括号项参数：`(` 前加空格，避免回读成函数记法 `\+(a, \+b)`
+  @love.answers_string(session, "X = (\\+ (a, \\+ b)).", out)
+  |> inspect(content="X = (\\+ (a,\\+b))")
+  // Scryer: X = (\+(a, \+ b)) -> X = \+(a,\+b)
+  // `\+(a, \+ b)` 是函数记法（arity 2）：functor `\+` 是 graphic token，不引号
+  @love.answers_string(session, "X = (\\+(a, \\+ b)).", out)
+  |> inspect(content="X = \\+(a,\\+b)")
+  // 含空格的原子仍需引号
+  @love.answers_string(session, "X = 'foo bar'.", out)
+  |> inspect(content="X = 'foo bar'")
+}
+
+///|
 test "variable or number as goal fails" {
   let session = @love.Session(@love.Database())
   let out = StringBuilder()
