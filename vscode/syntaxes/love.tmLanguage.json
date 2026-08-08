@@ -1,0 +1,90 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Love",
+  "scopeName": "source.love",
+  "fileTypes": [
+    "love"
+  ],
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#query" },
+    { "include": "#quoted-atom" },
+    { "include": "#number" },
+    { "include": "#functor" },
+    { "include": "#operator" },
+    { "include": "#cut" },
+    { "include": "#variable" },
+    { "include": "#atom" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comment": {
+      "patterns": [
+        {
+          "name": "comment.line.percentage.love",
+          "match": "%.*$"
+        },
+        {
+          "name": "comment.block.love",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "query": {
+      "name": "keyword.control.love",
+      "match": "\\?-"
+    },
+    "quoted-atom": {
+      "name": "string.quoted.single.love",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape.love",
+          "match": "\\\\['\\\\nrt]"
+        }
+      ]
+    },
+    "number": {
+      "name": "constant.numeric.love",
+      "match": "\\b\\d+\\b"
+    },
+    "functor": {
+      "name": "support.function.love",
+      "match": "\\b[a-z][A-Za-z0-9_]*\\s*(?=\\()"
+    },
+    "operator": {
+      "name": "keyword.operator.love",
+      "match": "[#$&*+\\-/:<=>?@^~\\\\]+"
+    },
+    "cut": {
+      "name": "keyword.control.love",
+      "match": "!"
+    },
+    "variable": {
+      "name": "variable.other.love",
+      "match": "\\b[A-Z_][A-Za-z0-9_]*\\b"
+    },
+    "atom": {
+      "name": "constant.other.love",
+      "match": "\\b[a-z][A-Za-z0-9_]*\\b"
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.bracket.love",
+          "match": "[()\\[\\]]"
+        },
+        {
+          "name": "punctuation.terminator.love",
+          "match": "\\."
+        },
+        {
+          "name": "punctuation.separator.love",
+          "match": "\\|"
+        }
+      ]
+    }
+  }
+}

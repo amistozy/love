@@ -1,0 +1,36 @@
+{
+  "name": "love-language",
+  "displayName": "Love Language",
+  "description": "Syntax highlighting for Love, a Prolog-like logic programming language",
+  "version": "0.1.0",
+  "publisher": "amistozy",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "love",
+        "aliases": [
+          "Love",
+          "love"
+        ],
+        "extensions": [
+          ".love"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "love",
+        "scopeName": "source.love",
+        "path": "./syntaxes/love.tmLanguage.json"
+      }
+    ]
+  }
+}
