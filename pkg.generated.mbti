@@ -68,6 +68,7 @@ pub struct Clause {
 type Database
 pub fn Database::Database() -> Self
 pub fn Database::add_clause(Self, Term, @list.List[Term]) -> Unit
+pub fn Database::clear(Self) -> Unit
 pub fn Database::lookup(Self, String) -> Array[Clause]
 pub fn Database::remove_predicate(Self, String, Int) -> Bool
 

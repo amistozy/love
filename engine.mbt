@@ -67,6 +67,12 @@ pub fn Database::remove_predicate(
 }
 
 ///|
+/// 清空数据库（删除全部子句）
+pub fn Database::clear(self : Database) -> Unit {
+  self.procs.clear()
+}
+
+///|
 /// 会话：数据库、变量重命名计数器、输出缓冲（write 内建写入）。
 /// 嵌套求解（findall / \+）共享会话，因此输出与命名保持一致。
 /// 抽象类型：外部通过 `new`/`drain_output`/`halt_requested` 等公开方法交互。

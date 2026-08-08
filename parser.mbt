@@ -192,7 +192,7 @@ fn Parser::parse_term_marked(
 ///|
 /// 解析前缀运算符或基本项。
 /// 仅在 `prec <= max_prec` 时吸收（ISO：`X = \+ 1` 中 `\+` 900 超过
-/// `=` 右操作数 699 的允许范围，报语法错误；顶层 max_prec 1300 允许 let/del）。
+/// `=` 右操作数 699 的允许范围，报语法错误；顶层 max_prec 1300 允许 let）。
 
 ///|
 fn Parser::parse_prefix_marked(
@@ -250,7 +250,7 @@ fn Parser::parse_primary_marked(self : Parser) -> (Term, Bool) raise LoveError {
     }
     Token::OpenCT | Token::Symbol("(") => {
       let _ = self.advance()
-      // 括号内允许任意项（含 let/del 1300）
+      // 括号内允许任意项（含 let 1300）
       let (t, _) = self.parse_term_marked(1300)
       self.expect(")")
       // 括号项标记：后续中缀结合检查跳过它（优先级隔离）

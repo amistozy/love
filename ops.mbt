@@ -52,14 +52,13 @@ fn infix_ops() -> Map[String, Op] {
 
 ///|
 /// 前缀运算符表。
-/// `let`/`del` 优先级（1300）高于 `:-`（1200），因此 `let Head :- Body.`
-/// 无需括号即可把整个规则作为参数（REPL 便利，谓词定义中不使用它们）。
+/// `let` 优先级（1300）高于 `:-`（1200），因此 `let Head :- Body.`
+/// 无需括号即可把整个规则作为参数（REPL 便利，谓词定义中不使用它）。
 fn prefix_ops() -> Map[String, Op] {
   {
     "\\+": { prec: 900, assoc: Fy },
     "-": { prec: 200, assoc: Fy },
     "let": { prec: 1300, assoc: Fy },
-    "del": { prec: 1300, assoc: Fy },
   }
 }
 

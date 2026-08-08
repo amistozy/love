@@ -613,8 +613,13 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
       e.session.db.add_clause(head, body)
       Succeed
     },
+    "del/0": (_args, e) => {
+      // 清空动态数据库（删除全部子句）
+      e.session.db.clear()
+      Succeed
+    },
     "del/1": (args, e) => {
-      // 删除谓词指示符 `Name/Arity` 对应的全部子句（如 `del foo/2.`）
+      // 删除谓词指示符 `Name/Arity` 对应的全部子句（如 `del(foo/2).`）
       guard args is [t] else { Fail }
       match walk_deep(t, @hashmap.HashMap::new()) {
         Compound("/", [Atom(name), Int(arity)]) =>

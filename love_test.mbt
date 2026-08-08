@@ -333,15 +333,26 @@ test "let and del builtins" {
   // 查询断言结果
   @love.answers_string(session, "parent(tom, X).", out)
   |> inspect(content="X = bob")
-  // 按谓词指示符删除全部子句
-  @love.answers_string(session, "del parent/2.", out) |> inspect(content="true")
+  // 按谓词指示符删除全部子句（函数记法）
+  @love.answers_string(session, "del(parent/2).", out)
+  |> inspect(content="true")
   @love.answers_string(session, "parent(tom, X).", out)
   |> inspect(content="false")
   // 删除不存在的谓词失败
-  @love.answers_string(session, "del nope/3.", out) |> inspect(content="false")
+  @love.answers_string(session, "del(nope/3).", out) |> inspect(content="false")
   // 非谓词指示符参数失败
-  @love.answers_string(session, "del parent(x, y).", out)
+  @love.answers_string(session, "del(parent(x, y)).", out)
   |> inspect(content="false")
+  // del/0：清空动态数据库（删除全部子句）
+  @love.answers_string(session, "let q(1).", out) |> inspect(content="true")
+  @love.answers_string(session, "del.", out) |> inspect(content="true")
+  @love.answers_string(session, "q(1).", out) |> inspect(content="false")
+  // del 不再作为运算符：旧前缀语法 `del q/1.` 报语法错误
+  try @love.answers_string(session, "del q/1.", out) catch {
+    @love.LoveError::Msg(_) => ()
+  } noraise {
+    _ => fail("expected to raise")
+  }
 }
 
 ///|

@@ -227,7 +227,7 @@ fn write_prefix(
             sb.write_char('(')
           }
           sb.write_string(name)
-          // 符号类前缀运算符（- \+）紧凑；字母类（let/del）需空格分隔避免黏连
+          // 符号类前缀运算符（- \+）紧凑；字母类（let）需空格分隔避免黏连
           let first = name[0]
           if first >= 97 && first <= 122 {
             sb.write_string(" ")

@@ -3,7 +3,8 @@
 ///
 /// - 提示符 `?- ` 后直接输入查询目标，如 `X : [1,2,3].`
 /// - `let` / `del` / `cls` / `halt` / `consult` 均为内建谓词：
-///   - `let Head.` / `let Head :- Body.` 断言子句，`del` 删除
+///   - `let Head.` / `let Head :- Body.` 断言子句
+///   - `del(foo/2).` 删除谓词，`del.` 清空数据库
 ///   - `cls.` 清屏，`halt.` 退出
 ///   - `consult(family).` 或 `[family].` 导入 `family.love`
 /// - 查询答案后输入 `;` 查看下一个解，`.` 或回车结束
@@ -14,8 +15,8 @@ async fn main {
     #|Love 1.0 - a little Prolog. Enter a query directly (end with '.').
     #|  query:   X : [1,2,3].
     #|  define:  let parent(tom, bob).
-    #|  remove:  del parent(tom, bob).
-    #|  clear:   cls.       load:   consult(family).
+    #|  remove:  del(foo/2).  clear-all:  del.
+    #|  clear:   cls.         load:       [file].
     #|  quit:    halt.
     #|
   @stdio.stdout.write(banner)

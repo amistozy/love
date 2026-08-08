@@ -36,7 +36,8 @@ X = 1.          % 单解直接结束，无需输入分号/句号
 |---|---|
 | `;` 查看下一个解 | 行尾显示 ` ;`，最后一个解自动以 `.` 收尾；无更多解打印 `false.` |
 | `let Head.` / `let Head :- Body.` | 断言事实/规则到数据库 |
-| `del foo/2.` | 按谓词指示符删除 `foo/2` 的全部子句 |
+| `del(foo/2).` | 按谓词指示符删除 `foo/2` 的全部子句 |
+| `del.` | 清空动态数据库（删除全部子句） |
 | `cls.` | 清屏（静默，无输出） |
 | `[name].` | 导入 `name.love`（`consult(name).` 的语法糖） |
 | `halt.` | 退出 |
@@ -66,7 +67,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 ### 运算符（优先级数字越大越松散）
 
 ```
-1300 fy   let del
+1300 fy   let
 1200 xfx  :-
 1100 xfy  ;          1000 xfy  ,
  900 fy   \+         700 xfx  = \= == \== < > =< >= =:= =\= is :
@@ -74,7 +75,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
  200 xfy  ^          200 fy   -
 ```
 
-- `let`/`del`（1300）优先级高于 `:-`（1200），`let Head :- Body.` 无需括号。
+- `let`（1300）优先级高于 `:-`（1200），`let Head :- Body.` 无需括号。
 - `^`（200 xfy）是 bagof/setof 的存在量词运算符。
 - 运算符名可作复合项 functor（函数记法）：`+(2,3)` 解析为 `2+3`。
 - 复合项 functor 必须紧跟 `(`：`foo(a)` 是复合项，`foo (a)` 是语法错误。
@@ -97,7 +98,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 - 算术：`is/2`、`=:=/2`、`=\=/2`、`</2`、`>/2`、`=</2`、`>=/2`、`between/3`
 - 列表：`:/2`（`X : [1,2,3]` 中缀成员）、`length/2`（双向）、`append/3`、`sort/2`（标准项序排序去重）、`keysort/2`（按键稳定排序，不去重）
 - 元编程：`findall/3`、`bagof/3`（按 witness 分组）、`setof/3`（排序去重）、`^/2`
-- 动态数据库：`let/1`（断言）、`del/1`（按 `Name/Arity` 删除全部子句）
+- 动态数据库：`let/1`（断言）、`del/1`（按 `Name/Arity` 删除全部子句）、`del/0`（清空数据库）
 - 会话：`cls/0`（清屏）、`halt/0`（退出）、`consult/1`（加载 `name.love`）
 - 输出：`write/1`、`writeln/1`、`nl/0`
 - 字符串：`atom_length/2`、`char_code/2`
