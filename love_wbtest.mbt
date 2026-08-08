@@ -191,3 +191,28 @@ test "openct prefix vs spaced paren" {
     fail("let (a), b should be absorbed as single arg")
   }
 }
+
+///|
+test "prefix operator as left operand parse" {
+  // Scryer: -a/b -> /(-(a),b)
+  let t1 = parse_query_text("X = -a/b.")
+  guard t1.head()
+    is Some(
+      Compound("=", [_, Compound("/", [Compound("-", [Atom("a")]), Atom("b")])])
+    ) else {
+    fail("expected /(-a, b)")
+  }
+  // 前缀 - 与中缀 - 混合：(-a) - b（`-` 双参数是中缀）
+  let t2 = parse_query_text("X = -a-b.")
+  guard t2.head()
+    is Some(
+      Compound("=", [_, Compound("-", [Compound("-", [Atom("a")]), Atom("b")])])
+    ) else {
+    fail("expected (-a) - b")
+  }
+  // 函数记法 let(foo) 根优先级 0：`,` 正常吸收（前缀 let 1300 则吸收逗号）
+  let t3 = parse_query_text("let(foo), X = 1.")
+  inspect(t3.length(), content="2")
+  let t4 = parse_query_text("let (a), b.")
+  inspect(t4.length(), content="1")
+}

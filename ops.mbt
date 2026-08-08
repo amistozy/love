@@ -79,16 +79,3 @@ fn prefix_op(name : String) -> (Int, Assoc)? {
     None => None
   }
 }
-
-///|
-/// 取复合项根运算符的优先级；非运算符项为 0
-fn root_prec(t : Term) -> Int {
-  match t {
-    Compound(name, _) =>
-      match infix_op(name) {
-        Some((prec, _)) => prec
-        None => 0
-      }
-    _ => 0
-  }
-}

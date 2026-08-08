@@ -414,6 +414,19 @@ test "let asserts a single clause" {
 }
 
 ///|
+test "prefix operator as left operand" {
+  let session = @love.Session(@love.Database())
+  let out = StringBuilder()
+  // Scryer: -a/b -> /(-(a),b)：前缀 -a（200）可被 /（400 yfx）结合
+  @love.answers_string(session, "X = -a/b.", out) |> inspect(content="X = -a/b")
+  // 前缀 - 与中缀 - 混合：(-a) - b
+  @love.answers_string(session, "X = -a-b.", out) |> inspect(content="X = -a-b")
+  // 优先级：/ 先于 +
+  @love.answers_string(session, "X = -a+b/c.", out)
+  |> inspect(content="X = -a+b/c")
+}
+
+///|
 test "variable or number as goal fails" {
   let session = @love.Session(@love.Database())
   let out = StringBuilder()
