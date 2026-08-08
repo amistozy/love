@@ -196,7 +196,7 @@ fn sort_groups(groups : Array[Array[Env]], witness : Array[String]) -> Unit {
 }
 
 ///|
-/// 对项列表排序（term_compare，插入排序）
+/// 对项列表排序（term_compare）
 fn sort_terms(ts : Array[Term], env : Env) -> Array[Term] {
   ts.sort_by((a, b) => term_compare(a, b, env))
   ts
