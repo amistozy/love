@@ -9,7 +9,7 @@ test "parse program and query" {
       #|
     ),
   )
-  let session = @love.Session::new(db)
+  let session = @love.Session(db)
   let out = StringBuilder()
   @love.answers_string(session, "grandparent(tom, Who).", out)
   |> inspect(content="Who = ann")
@@ -17,7 +17,7 @@ test "parse program and query" {
 
 ///|
 test "append generates all splits" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   @love.answers_string(session, "append(X, Y, [1, 2, 3]).", out)
   |> inspect(
@@ -27,7 +27,7 @@ test "append generates all splits" {
 
 ///|
 test ": enumerates solutions" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   @love.answers_string(session, "X : [a,b,c].", out)
   |> inspect(content="X = a; X = b; X = c")
@@ -35,7 +35,7 @@ test ": enumerates solutions" {
 
 ///|
 test "length works both directions" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   @love.answers_string(session, "length([1, 2, 3], N).", out)
   |> inspect(content="N = 3")
@@ -46,7 +46,7 @@ test "length works both directions" {
 
 ///|
 test "arithmetic is and comparison" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   @love.answers_string(session, "X is 2 + 3 * 4.", out)
   |> inspect(content="X = 14")
@@ -67,7 +67,7 @@ test "cut prunes alternatives" {
       #|
     ),
   )
-  let session = @love.Session::new(db)
+  let session = @love.Session(db)
   let out = StringBuilder()
   @love.answers_string(session, "q(X).", out) |> inspect(content="X = 1; X = 2")
 }
@@ -84,7 +84,7 @@ test "cut in middle of body" {
       #|
     ),
   )
-  let session = @love.Session::new(db)
+  let session = @love.Session(db)
   let out = StringBuilder()
   @love.answers_string(session, "p(X).", out) |> inspect(content="X = 1")
 }
@@ -100,7 +100,7 @@ test "cut removes alternative clause" {
       #|
     ),
   )
-  let session = @love.Session::new(db)
+  let session = @love.Session(db)
   let out = StringBuilder()
   @love.answers_string(session, "p(X).", out) |> inspect(content="X = 1")
 }
@@ -115,7 +115,7 @@ test "negation as failure" {
       #|
     ),
   )
-  let session = @love.Session::new(db)
+  let session = @love.Session(db)
   let out = StringBuilder()
   @love.answers_string(session, "\\+ man(ann).", out) |> inspect(content="true")
   let out2 = StringBuilder()
@@ -133,7 +133,7 @@ test "findall collects solutions" {
       #|
     ),
   )
-  let session = @love.Session::new(db)
+  let session = @love.Session(db)
   let out = StringBuilder()
   @love.answers_string(session, "findall(C, color(C), L).", out)
   |> inspect(content="L = [red,green,blue]")
@@ -141,7 +141,7 @@ test "findall collects solutions" {
 
 ///|
 test "findall with comma and disjunction goal" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   // goal 是 `,` 复合（多目标），需扁平化
   @love.answers_string(session, "findall(Y, (X : [1,2,3], Y is X+1), L).", out)
@@ -158,7 +158,7 @@ test "findall with comma and disjunction goal" {
 
 ///|
 test "call meta predicate" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   // call 执行 `,` 复合目标
   @love.answers_string(session, "call((X = 1, Y = 2)).", out)
@@ -176,7 +176,7 @@ test "call meta predicate" {
 
 ///|
 test "function notation and operator spacing" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   // 函数记法 `+(2,3)` 显示为中缀 `2+3`（与 Scryer 一致）
   @love.answers_string(session, "X = +(2,3).", out)
@@ -193,7 +193,7 @@ test "function notation and operator spacing" {
 
 ///|
 test "bagof setof between" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   let _ = @love.load_text(session, "f(1, 2). f(1, 3). f(2, 4).")
   // between 枚举
@@ -222,7 +222,7 @@ test "bagof setof between" {
 
 ///|
 test "disjunction with semicolon" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   @love.answers_string(session, "(X = a ; X = b ; X = c).", out)
   |> inspect(content="X = a; X = b; X = c")
@@ -236,7 +236,7 @@ test "write builtin outputs to buffer" {
       #|
     ),
   )
-  let session = @love.Session::new(db)
+  let session = @love.Session(db)
   let out = StringBuilder()
   @love.answers_string(session, "greet(world).", out) |> inspect(content="true")
   out.to_string() |> inspect(content="hello world\n")
@@ -244,7 +244,7 @@ test "write builtin outputs to buffer" {
 
 ///|
 test "unification with occurs check" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   @love.answers_string(session, "X = f(X).", out) |> inspect(content="false")
 }
@@ -262,7 +262,7 @@ test "family tree with multiple answers" {
       #|
     ),
   )
-  let session = @love.Session::new(db)
+  let session = @love.Session(db)
   let out = StringBuilder()
   @love.answers_string(session, "grandparent(tom, Who).", out)
   |> inspect(content="Who = ann; Who = joe")
@@ -273,7 +273,7 @@ test "family tree with multiple answers" {
 
 ///|
 test "quoted atoms and lists display" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   @love.answers_string(session, "X = 'hello world'.", out)
   |> inspect(content="X = 'hello world'")
@@ -290,7 +290,7 @@ test "variable identity preserved across clause" {
       #|
     ),
   )
-  let session = @love.Session::new(db)
+  let session = @love.Session(db)
   let out = StringBuilder()
   @love.answers_string(session, "same(a, b).", out) |> inspect(content="false")
   let out2 = StringBuilder()
@@ -299,7 +299,7 @@ test "variable identity preserved across clause" {
 
 ///|
 test "unbound predicate fails" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   @love.answers_string(session, "unknown_predicate(x).", out)
   |> inspect(content="false")
@@ -307,7 +307,7 @@ test "unbound predicate fails" {
 
 ///|
 test "let and del builtins" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   // 断言事实
   @love.answers_string(session, "let parent(tom, bob).", out)
@@ -331,7 +331,7 @@ test "let and del builtins" {
 
 ///|
 test "variable or number as goal fails" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   // 未绑定变量不能作为目标（不崩溃，失败）
   @love.answers_string(session, "X.", out) |> inspect(content="false")
@@ -348,7 +348,7 @@ test "variable or number as goal fails" {
 
 ///|
 test "cls halt consult builtins" {
-  let session = @love.Session::new(@love.Database::new())
+  let session = @love.Session(@love.Database())
   let out = StringBuilder()
   // cls/0：把 ANSI 清屏序列写入输出缓冲
   @love.answers_string(session, "cls.", out) |> inspect(content="true")

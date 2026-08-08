@@ -55,11 +55,11 @@ pub fn parse_clause_text(src : String) -> Clause raise LoveError {
 
 ///|
 /// 解析查询：`?- Goal.`（`?-` 与结尾 `.` 均可省略）
-pub fn parse_query_text(src : String) -> Array[Term] raise LoveError {
+pub fn parse_query_text(src : String) -> @list.List[Term] raise LoveError {
   let tokens = lex(src)
   let p = { tokens, pos: 0, anon: 0 }
   let t = p.parse_term(1300)
-  let goals = flatten(t)
+  let goals = flatten_list(t)
   match p.peek() {
     Token::Symbol(".") => {
       let _ = p.advance()
@@ -74,12 +74,12 @@ pub fn parse_query_text(src : String) -> Array[Term] raise LoveError {
 /// 解析一个子句（假设 token 流已就绪）
 fn Parser::parse_clause(self : Parser) -> Clause raise LoveError {
   let head = self.parse_term(1199)
-  let mut body = []
+  let mut body : @list.List[Term] = @list.empty()
   match self.peek() {
     Token::Symbol(":-") => {
       let _ = self.advance()
       let t = self.parse_term(1199)
-      body = flatten(t)
+      body = flatten_list(t)
     }
     _ => ()
   }
@@ -93,20 +93,19 @@ fn Parser::parse_clause(self : Parser) -> Clause raise LoveError {
 }
 
 ///|
-/// 把 `,` 复合项扁平化为目标列表（子句体 / 查询顶层）
-fn flatten(t : Term) -> Array[Term] {
+/// 把 `,` 复合项扁平化为目标迭代器（惰性展平：递归直接 `flat_map(flatten)`，
+/// 全程不构造中间 List，只有最终物化一次）。
+fn flatten(t : Term) -> Iter[Term] {
   match t {
-    Compound(",", args) => {
-      let out = []
-      for a in args {
-        for g in flatten(a) {
-          out.push(g)
-        }
-      }
-      out
-    }
-    _ => [t]
+    Compound(",", args) => args.iter().flat_map(flatten)
+    _ => Iter::singleton(t)
   }
+}
+
+///|
+/// 物化为目标列表（调用方都需要完整 goals 队列）
+fn flatten_list(t : Term) -> @list.List[Term] {
+  @list.List::from_iter(flatten(t))
 }
 
 ///|

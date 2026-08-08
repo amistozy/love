@@ -4,12 +4,12 @@
 /// 用法：
 /// ```
 /// let db = program_from_text("parent(tom, bob). parent(bob, ann). grandparent(X, Y) :- parent(X, Z), parent(Z, Y).")
-/// let session = Session::new(db)
+/// let session = Session(db)
 /// inspect(answers_string(session, "grandparent(tom, Who)."))
 /// ```
 pub fn program_from_text(src : String) -> Database raise LoveError {
   let clauses = parse_program_text(src)
-  let db = Database::new()
+  let db = Database()
   for c in clauses {
     db.add_clause(c.head, c.body)
   }

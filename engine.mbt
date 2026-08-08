@@ -2,7 +2,7 @@
 /// 子句：事实（body 为空）或规则 `Head :- Body.`
 pub struct Clause {
   head : Term
-  body : Array[Term]
+  body : @list.List[Term]
 }
 
 ///|
@@ -14,7 +14,7 @@ struct Database {
 }
 
 ///|
-pub fn Database::new() -> Database {
+pub fn Database::Database() -> Database {
   { procs: {} }
 }
 
@@ -33,12 +33,13 @@ fn pred_key(t : Term) -> String {
 pub fn Database::add_clause(
   self : Database,
   head : Term,
-  body : Array[Term],
+  body : @list.List[Term],
 ) -> Unit {
   let key = pred_key(head)
+  let clause = { head, body }
   match self.procs.get(key) {
-    Some(arr) => arr.push({ head, body })
-    None => self.procs[key] = [{ head, body }]
+    Some(arr) => arr.push(clause)
+    None => self.procs[key] = [clause]
   }
 }
 
@@ -69,17 +70,19 @@ pub fn Database::remove_predicate(
 /// 会话：数据库、变量重命名计数器、输出缓冲（write 内建写入）。
 /// 嵌套求解（findall / \+）共享会话，因此输出与命名保持一致。
 /// 抽象类型：外部通过 `new`/`drain_output`/`halt_requested` 等公开方法交互。
+/// struct 是引用类型：Session 传给子 Engine（call/findall/\+）时共享同一对象，
+/// mut counter 在所有查询间全局递增，保证变量重命名互不冲突。
 struct Session {
   db : Database
-  counter : Ref[Int]
+  mut counter : Int
   output : StringBuilder
   mut halt : Bool
   mut quiet : Bool
 }
 
 ///|
-pub fn Session::new(db : Database) -> Session {
-  { db, counter: Ref(0), output: StringBuilder(), halt: false, quiet: false }
+pub fn Session::Session(db : Database) -> Session {
+  { db, counter: 0, output: StringBuilder(), halt: false, quiet: false }
 }
 
 ///|
@@ -112,10 +115,12 @@ pub fn Session::drain_output(self : Session) -> String {
 }
 
 ///|
-/// 生成一个全新的变量名（全局递增，保证不与任何现有变量冲突）
+/// 生成一个全新的变量名（全局递增，保证不与任何现有变量冲突）。
+/// counter 用 mut Int：struct 是引用类型，子 Engine（call/findall/\+）共享
+/// 同一 Session，计数在所有查询间全局递增，变量重命名互不冲突。
 fn fresh_var_name(e : Engine, prefix : String) -> String {
-  e.session.counter.val = e.session.counter.val + 1
-  "\{prefix}#\{e.session.counter.val}"
+  e.session.counter += 1
+  "\{prefix}#\{e.session.counter}"
 }
 
 ///|
@@ -124,13 +129,13 @@ fn fresh_var_name(e : Engine, prefix : String) -> String {
 /// 仅作为 ChoicePoint 的内部字段类型使用。
 priv enum Candidate {
   Db(Clause)
-  Inline(Array[(Term, Term)], Array[Term])
+  Inline(Array[(Term, Term)], @list.List[Term])
 }
 
 ///|
 /// 选择点：记录回溯时恢复的状态
 priv struct ChoicePoint {
-  goals : ArrayView[Term]
+  goals : @list.List[Term]
   env : Env
   candidates : Array[Candidate]
   mut ci : Int
@@ -146,7 +151,7 @@ priv struct ChoicePoint {
 /// 求解状态（目标、环境、选择点栈）完全隐藏。
 struct Engine {
   session : Session
-  mut goals : ArrayView[Term]
+  mut goals : @list.List[Term]
   mut env : Env
   stack : Array[ChoicePoint]
   mut cut_marker : Int
@@ -154,52 +159,43 @@ struct Engine {
 }
 
 ///|
-/// 从查询目标创建引擎（goals 转 view，推进时切片零拷贝）
-pub fn Engine::new(session : Session, goals : Array[Term], env : Env) -> Engine {
+/// 从查询目标创建引擎
+pub fn Engine::new(
+  session : Session,
+  goals : @list.List[Term],
+  env : Env,
+) -> Engine {
   { session, goals, env, stack: [], cut_marker: 0, exhausted: false }
 }
 
 ///|
 /// 子句实例化：重命名其中的变量为全新变量
-fn rename_clause(e : Engine, clause : Clause) -> (Term, Array[Term]) {
-  let (head, map) = rename_term(e, clause.head, @hashmap.HashMap::new())
-  let body = []
-  let mut m = map
-  for t in clause.body {
-    let (nt, m2) = rename_term(e, t, m)
-    body.push(nt)
-    m = m2
-  }
+fn rename_clause(e : Engine, clause : Clause) -> (Term, @list.List[Term]) {
+  // 重命名表是子句展开的临时结构（不跨回溯），用可变 Map 原地更新
+  let map : Map[String, String] = Map([])
+  let head = rename_term(e, clause.head, map)
+  let body = clause.body.map(t => rename_term(e, t, map))
   (head, body)
 }
 
 ///|
-/// 重命名项中的变量，返回 (新项, 更新后的重命名表)
-fn rename_term(
-  e : Engine,
-  t : Term,
-  map : @hashmap.HashMap[String, String],
-) -> (Term, @hashmap.HashMap[String, String]) {
+/// 重命名项中的变量（原地更新可变重命名表）
+fn rename_term(e : Engine, t : Term, map : Map[String, String]) -> Term {
   match t {
     Var(name) =>
       match map.get(name) {
-        Some(new) => (Var(new), map)
+        Some(new) => Var(new)
         None => {
           let new = fresh_var_name(e, name)
-          (Var(new), map.add(name, new))
+          map[name] = new
+          Var(new)
         }
       }
     Compound(f, args) => {
-      let new_args = []
-      let mut m = map
-      for a in args {
-        let (na, m2) = rename_term(e, a, m)
-        new_args.push(na)
-        m = m2
-      }
-      (Compound(f, new_args), m)
+      let new_args = args.map(a => rename_term(e, a, map))
+      Compound(f, new_args)
     }
-    _ => (t, map)
+    _ => t
   }
 }
 
@@ -215,11 +211,11 @@ priv enum StepResult {
 fn Engine::step_once(self : Engine) -> StepResult {
   for ;; {
     // 取 goals 头与尾（guard is 解构）
-    guard self.goals is [g, .. rest] else { return SolutionFound }
+    guard self.goals is More(g, tail~) else { return SolutionFound }
     if g is Atom("!") {
       // cut：截断选择点栈到当前子句进入时的高度
       self.stack.truncate(self.cut_marker)
-      self.goals = rest
+      self.goals = tail
       continue
     }
     if self.solve_goal(g) {
@@ -266,20 +262,19 @@ pub fn Engine::next_solution(self : Engine) -> Env? {
 /// 失败时返回 false（调用方负责回溯）。
 fn Engine::solve_goal(self : Engine, g : Term) -> Bool {
   // 取 goals 尾（成功时推进用；guard is 解构）
-  guard self.goals is [_, .. rest] else { return false }
+  guard self.goals is More(_, tail~) else { return false }
   // 目标先沿环境展开：绑定到具体项则按其求解；
   // 变量或数字不能作为目标（如 `?- X.` / `?- 1.`），失败而非崩溃
   let g = match walk(g, self.env) {
-    Var(_) => return false
-    Int(_) => return false
+    Var(_) | Int(_) => return false
     other => other
   }
   // 析取 (A ; B)：展开为两个内联候选，先 A 后 B（回溯时尝试 B）
   match g {
     Compound(";", [a, b]) => {
       let cands = [
-        Candidate::Inline([], flatten(a)),
-        Candidate::Inline([], flatten(b)),
+        Candidate::Inline([], flatten_list(a)),
+        Candidate::Inline([], flatten_list(b)),
       ]
       self.push_choice(cands)
       return self.try_candidate(g)
@@ -291,12 +286,12 @@ fn Engine::solve_goal(self : Engine, g : Term) -> Bool {
       match result {
         Fail => false
         Succeed => {
-          self.goals = rest
+          self.goals = tail
           true
         }
         SucceedEnv(env) => {
           self.env = env
-          self.goals = rest
+          self.goals = tail
           true
         }
         Choice(env, cands) => {
@@ -337,7 +332,7 @@ fn Engine::push_choice(self : Engine, cands : Array[Candidate]) -> Unit {
 /// 的其他选择点或返回 false
 fn Engine::try_candidate(self : Engine, g : Term) -> Bool {
   // 取 goals 尾（候选成功时推进用；guard is 解构）
-  guard self.goals is [_, .. rest] else { return false }
+  guard self.goals is More(_, tail~) else { return false }
   for ;; {
     if self.stack.is_empty() {
       return false
@@ -358,10 +353,10 @@ fn Engine::try_candidate(self : Engine, g : Term) -> Bool {
           Some(env2) => {
             self.env = env2
             if body.is_empty() {
-              self.goals = rest
+              self.goals = tail
             } else {
               self.cut_marker = cp_marker
-              self.goals = body + rest.to_owned()
+              self.goals = body.concat(tail)
             }
             true
           }
@@ -385,10 +380,10 @@ fn Engine::try_candidate(self : Engine, g : Term) -> Bool {
         } else {
           self.env = env
           if body.is_empty() {
-            self.goals = rest
+            self.goals = tail
           } else {
             self.cut_marker = cp_marker
-            self.goals = body + rest.to_owned()
+            self.goals = body.concat(tail)
           }
           true
         }
@@ -414,7 +409,7 @@ fn Engine::backtrack(self : Engine) -> Bool {
       self.goals = cp.goals
       self.env = cp.env
       self.cut_marker = cp.cut_ctx
-      guard self.goals is [g, ..] else { return false }
+      guard self.goals is More(g, ..) else { return false }
       if self.try_candidate(g) {
         return true
       }
@@ -440,7 +435,7 @@ pub fn solve_all(e : Engine) -> Array[Env] {
 
 ///|
 /// 在子会话中求解：返回所有解的环境
-fn sub_solve_all(e : Engine, goals : Array[Term], env : Env) -> Array[Env] {
+fn sub_solve_all(e : Engine, goals : @list.List[Term], env : Env) -> Array[Env] {
   let sub = Engine::new(e.session, goals, env)
   solve_all(sub)
 }

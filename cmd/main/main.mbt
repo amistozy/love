@@ -8,8 +8,8 @@
 ///   - `consult(family).` 或 `[family].` 导入 `family.love`
 /// - 查询答案后输入 `;` 查看下一个解，`.` 或回车结束
 async fn main {
-  let db = @love.Database::new()
-  let session = @love.Session::new(db)
+  let db = @love.Database()
+  let session = @love.Session(db)
   let banner =
     #|Love 1.0 - a little Prolog. Enter a query directly (end with '.').
     #|  query:   X : [1,2,3].
@@ -51,7 +51,7 @@ async fn main {
       // `[name].` 是 `consult(name).` 的语法糖（参考 Scryer toplevel.pl 的
       // instruction_match：读入的单元素列表且元素为原子时转成 consult 查询）
       let is_consult = match @love.parse_query_text(t) {
-        [Compound(".", [Atom(name), Atom("[]")])] => Some(name)
+        More(Compound(".", [Atom(name), Atom("[]")]), tail=Empty) => Some(name)
         _ => None
       }
       match is_consult {

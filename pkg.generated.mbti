@@ -3,6 +3,7 @@ package "amistozy/love"
 
 import {
   "moonbitlang/core/immut/hashmap",
+  "moonbitlang/core/list",
 }
 
 // Values
@@ -28,7 +29,7 @@ pub fn parse_clause_text(String) -> Clause raise LoveError
 
 pub fn parse_program_text(String) -> Array[Clause] raise LoveError
 
-pub fn parse_query_text(String) -> Array[Term] raise LoveError
+pub fn parse_query_text(String) -> @list.List[Term] raise LoveError
 
 pub fn program_from_text(String) -> Database raise LoveError
 
@@ -61,23 +62,23 @@ pub fn LoveError::message(Self) -> String
 // Types and methods
 pub struct Clause {
   head : Term
-  body : Array[Term]
+  body : @list.List[Term]
 }
 
 type Database
-pub fn Database::add_clause(Self, Term, Array[Term]) -> Unit
+pub fn Database::Database() -> Self
+pub fn Database::add_clause(Self, Term, @list.List[Term]) -> Unit
 pub fn Database::lookup(Self, String) -> Array[Clause]
-pub fn Database::new() -> Self
 pub fn Database::remove_predicate(Self, String, Int) -> Bool
 
 type Engine
-pub fn Engine::new(Session, Array[Term], @hashmap.HashMap[String, Term]) -> Self
+pub fn Engine::new(Session, @list.List[Term], @hashmap.HashMap[String, Term]) -> Self
 pub fn Engine::next_solution(Self) -> @hashmap.HashMap[String, Term]?
 
 type Session
+pub fn Session::Session(Database) -> Self
 pub fn Session::drain_output(Self) -> String
 pub fn Session::halt_requested(Self) -> Bool
-pub fn Session::new(Database) -> Self
 pub fn Session::quiet_requested(Self) -> Bool
 pub fn Session::take_quiet(Self) -> Bool
 
@@ -93,6 +94,7 @@ pub enum Token {
   Quoted(String)
   Int(Int)
   Symbol(String)
+  OpenCT
   Eof
 }
 

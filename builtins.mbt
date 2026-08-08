@@ -51,7 +51,7 @@ fn int_div(a : Int, b : Int) -> Int raise LoveError {
 
 ///|
 /// 子会话求解是否有解（用于 `\+`，只求第一个解）
-fn sub_has_solution(e : Engine, goals : Array[Term], env : Env) -> Bool {
+fn sub_has_solution(e : Engine, goals : @list.List[Term], env : Env) -> Bool {
   let sub = Engine::new(e.session, goals, env)
   sub.next_solution() is Some(_)
 }
@@ -305,7 +305,7 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
       guard args is [a] else { Fail }
       // 复用 call/1 执行任意目标（含 `,` 复合），
       // 等价于 Scryer 的 `\+ G :- call(G), !, '$fail'.`
-      if sub_has_solution(e, [Compound("call", [a])], e.env) {
+      if sub_has_solution(e, @list.List([Compound("call", [a])]), e.env) {
         Fail
       } else {
         Succeed
@@ -317,8 +317,11 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
       let h = Var(fresh_var_name(e, "H"))
       let t = Var(fresh_var_name(e, "T"))
       Choice(e.env, [
-        Inline([(l, Compound(".", [x, t]))], []),
-        Inline([(l, Compound(".", [h, t]))], [Compound(":", [x, t])]),
+        Inline([(l, Compound(".", [x, t]))], @list.empty()),
+        Inline(
+          [(l, Compound(".", [h, t]))],
+          @list.List([Compound(":", [x, t])]),
+        ),
       ])
     },
     "length/2": (args, e) => {
@@ -349,11 +352,14 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
             let t = Var(fresh_var_name(e, "T"))
             let n1 = Var(fresh_var_name(e, "N"))
             Choice(e.env, [
-              Inline([(l, Atom("[]")), (n, Int(0))], []),
-              Inline([(l, Compound(".", [h, t]))], [
-                Compound("length", [t, n1]),
-                Compound("is", [n, Compound("+", [n1, Int(1)])]),
-              ]),
+              Inline([(l, Atom("[]")), (n, Int(0))], @list.empty()),
+              Inline(
+                [(l, Compound(".", [h, t]))],
+                @list.List([
+                  Compound("length", [t, n1]),
+                  Compound("is", [n, Compound("+", [n1, Int(1)])]),
+                ]),
+              ),
             ])
           }
         }
@@ -365,22 +371,23 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
       let t1 = Var(fresh_var_name(e, "T1"))
       let r1 = Var(fresh_var_name(e, "R1"))
       Choice(e.env, [
-        Inline([(a, Atom("[]")), (c, b)], []),
-        Inline([(a, Compound(".", [h, t1])), (c, Compound(".", [h, r1]))], [
-          Compound("append", [t1, b, r1]),
-        ]),
+        Inline([(a, Atom("[]")), (c, b)], @list.empty()),
+        Inline(
+          [(a, Compound(".", [h, t1])), (c, Compound(".", [h, r1]))],
+          @list.List([Compound("append", [t1, b, r1])]),
+        ),
       ])
     },
     "call/1": (args, e) => {
       // call(Goal) = 把 Goal 作为目标执行（`,` 复合展开为目标序列）
       guard args is [g] else { Fail }
-      Choice(e.env, [Candidate::Inline([], flatten(g))])
+      Choice(e.env, [Candidate::Inline([], flatten_list(g))])
     },
     "findall/3": (args, e) => {
       guard args is [t, goal, l] else { Fail }
       // 复用 call/1 执行任意目标（含 `,` 复合），
       // 等价于 Scryer 的 `'$iterate_find_all'` 里的 `call(Goal)`
-      let envs = sub_solve_all(e, [Compound("call", [goal])], e.env)
+      let envs = sub_solve_all(e, @list.List([Compound("call", [goal])]), e.env)
       let terms = envs.map(env => walk_deep(t, env))
       let list = make_list(terms)
       match unify(l, list, e.env) {
@@ -395,7 +402,7 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
       let witness = bagof_witness(e, t, goal)
       let envs = sub_solve_all(
         e,
-        [Compound("call", [strip_existential(goal)])],
+        @list.List([Compound("call", [strip_existential(goal)])]),
         e.env,
       )
       if envs.is_empty() {
@@ -426,7 +433,7 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
         sort_groups(groups, witness)
         let cands = groups.map(g => {
           let terms = g.map(env => walk_deep(t, env))
-          Candidate::Inline([(bag, make_list(terms))], [])
+          Candidate::Inline([(bag, make_list(terms))], @list.empty())
         })
         Choice(e.env, cands)
       }
@@ -437,7 +444,7 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
       let witness = bagof_witness(e, t, goal)
       let envs = sub_solve_all(
         e,
-        [Compound("call", [strip_existential(goal)])],
+        @list.List([Compound("call", [strip_existential(goal)])]),
         e.env,
       )
       if envs.is_empty() {
@@ -472,7 +479,7 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
             sort_terms(g.map(env => walk_deep(t, env)), e.env),
             e.env,
           )
-          Candidate::Inline([(set, make_list(terms))], [])
+          Candidate::Inline([(set, make_list(terms))], @list.empty())
         })
         Choice(e.env, cands)
       }
@@ -491,7 +498,7 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
           if a <= b {
             let cands = []
             for n in a..<=b {
-              cands.push(Candidate::Inline([(x, Int(n))], []))
+              cands.push(Candidate::Inline([(x, Int(n))], @list.empty()))
             }
             Choice(e.env, cands)
           } else {
@@ -629,10 +636,10 @@ fn load_program_safe(db : Database, src : String) -> Bool {
 ///|
 /// 拆分 `(Head :- Body)` 或普通项为 (head, body 目标列表)。
 /// 用于 `let` 内建（对应标准 Prolog 的 assert）。
-fn clause_parts(t : Term) -> (Term, Array[Term]) {
+fn clause_parts(t : Term) -> (Term, @list.List[Term]) {
   match walk_deep(t, @hashmap.HashMap::new()) {
-    Compound(":-", [h, b]) => (h, flatten(b))
-    other => (other, [])
+    Compound(":-", [h, b]) => (h, flatten_list(b))
+    other => (other, @list.empty())
   }
 }
 
