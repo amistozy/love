@@ -1,10 +1,18 @@
-# Love：一个用 MoonBit 实现的类 Prolog 语言
+# Love：用 MoonBit 实现的迷你 Prolog
 
-Love 是一个逻辑编程（logic programming）语言，语法与语义遵循 Prolog 的核心
-模型：程序由**子句**（事实与规则）构成，查询通过**合一**与**带回溯的 SLD 解析**
-求解。实现针对教学场景做了简化：直接以项结构递归合一，用显式选择点栈实现
-回溯；环境采用**持久化不可变 HashMap**（`moonbitlang/core/immut/hashmap`），
-绑定返回结构共享的新环境，省去 trail。
+Love 是一个用 [MoonBit](https://docs.moonbitlang.com) 实现的类 Prolog 逻辑编程
+语言。它遵循 Prolog 的核心模型：程序由**子句**（事实与规则）构成，查询通过
+**合一**与**带回溯的 SLD 解析**求解，并附带交互式 REPL。实现针对教学场景做了
+简化，但保留了核心语义。
+
+## 特性
+
+- **完整语法分析**：递归下降 + 运算符优先级爬升，支持函数记法、列表糖、引号原子、注释
+- **纯函数式合一**：持久化不可变 HashMap 作为环境，结构共享、无 trail，带 occurs check
+- **显式回溯**：选择点栈驱动的深度优先 SLD 解析，支持逐解枚举与无限程序
+- **核心控制结构**：cut、否定即失败（`\+`）、`call/1`、析取
+- **丰富内建谓词**：算术、列表、元编程（findall/bagof/setof）、动态数据库、会话控制
+- **交互式 REPL**：逐解交互、预读自动收尾、`let`/`del`/`consult` 便利谓词
 
 ## 快速开始
 
@@ -15,53 +23,28 @@ moon run cmd/main      # 启动 REPL
 
 ## REPL
 
-提示符 `?- ` 后直接输入查询目标，采用 SWI-Prolog 风格的逐解交互：
+提示符 `?- ` 后直接输入查询目标：
 
 ```prolog
 ?- X : [1,2,3].
 X = 1 ;
 X = 2 ;
-X = 3.           ← 预读（lookahead）发现无更多解，自动以句号收尾
+X = 3.          % 预读（lookahead）发现无更多解，自动以句号收尾
 
 ?- X = 1.
-X = 1.           ← 单解直接结束，无需输入分号/句号
+X = 1.          % 单解直接结束，无需输入分号/句号
 ```
-
-**句号规则**：程序自动收尾的句号前**没有空格**（`X = 3.`）；用户手动输入的
-句号（终端回显）前才有空格（`X = 2 .`）。
-
-### 交互约定
 
 | 操作 | 行为 |
 |---|---|
-| 输入查询目标 | 提示符 `?- ` 后直接输入，如 `X : [1,2]`. |
-| `;` 看下一个解 | 有后续解时行尾显示 ` ;`，最后一个解自动 `.` 收尾 |
-| 无更多解 | 打印 `false.` |
-| 多行输入 | 输入不以 `.` 结束时用 ` | ` 续行（如长查询换行写） |
+| `;` 查看下一个解 | 行尾显示 ` ;`，最后一个解自动以 `.` 收尾；无更多解打印 `false.` |
 | `let Head.` / `let Head :- Body.` | 断言事实/规则到数据库 |
 | `del foo/2.` | 按谓词指示符删除 `foo/2` 的全部子句 |
 | `cls.` | 清屏（静默，无输出） |
 | `[name].` | 导入 `name.love`（`consult(name).` 的语法糖） |
 | `halt.` | 退出 |
 
-```prolog
-?- let parent(tom, bob).                          % 断言事实
-true.
-?- let grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 断言规则（let 优先级高于 :-，无需括号）
-true.
-?- [family].                                      % 导入 family.love
-true.
-?- grandparent(tom, Who).
-Who = ann.                                        % 单解，预读直接收尾
-?- del parent/2.                                  % 删除谓词 parent/2 的全部子句
-true.
-?- cls.                                           % 清屏（静默）
-?- halt.                                          % 退出
-```
-
-`[name].` 的判定在 term 层完成：读入的 term 为**单元素列表 `[Item]` 且
-`Item` 是原子**时转成 `consult(Item)` 查询；`[X, Y] = [2, 3].`、`[X].` 等
-不会被误判，仍按普通查询求解。
+多行输入：输入不以 `.` 结束时用 ` | ` 续行。
 
 ## 语言
 
@@ -73,14 +56,14 @@ true.
 | `foo`、`'hello world'` | 原子 | `Atom(String)` |
 | `X`、`_` | 变量（大写/下划线开头） | `Var(String)` |
 | `f(a, b)` | 复合项 | `Compound("f", [a, b])` |
-| `[a, b, c]`、`[H \| T]`、`[]` | 列表（`.`/`[]` 链语法糖） | `Compound(".", ...)` |
+| `[a, b, c]`、`[H \| T]`、`[]` | 列表 | `Compound(".", ...)` 链 |
 
 ### 子句与查询
 
 ```prolog
-parent(tom, bob).                    % 事实
+parent(tom, bob).                                  % 事实
 grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
-?- grandparent(tom, Who).            % 查询（答案为 Who = ann）
+?- grandparent(tom, Who).                          % 查询 → Who = ann
 ```
 
 ### 运算符（优先级数字越大越松散）
@@ -90,24 +73,15 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 1200 xfx  :-
 1100 xfy  ;          1000 xfy  ,
  900 fy   \+         700 xfx  = \= == \== < > =< >= =:= =\= is :
- 500 yfx  + -         400 yfx  * / // mod
+ 500 yfx  + -        400 yfx  * / //   400 xfx  mod
  200 xfy  ^          200 fy   -
 ```
 
-- `let`/`del`（1300）优先级高于 `:-`（1200）：`let Head :- Body.` 无需括号
-  即可把整个规则作为参数——它们是 REPL 便利谓词，不出现在谓词定义中。
-- `^`（200 xfy）是 bagof/setof 的存在量词运算符：`Y^Goal` 中 `Y` 不参与分组。
-- 运算符名可作为复合项 functor（函数记法）：`+(2,3)` 解析为 `2+3`、`is(X,Y)`
-  解析为 `X is Y`。
-
-### 语法与优先级约束
-
-- **前缀运算符受上下文优先级约束**（ISO）：`X = \+ 1` 报语法错误
-  （`\+` 900 超过 `=` 右操作数 699 的允许范围，与 SWI 的 Operator priority
-  clash / Scryer 的 incomplete_reduction 一致）；需写作 `X = (\+ 1)`。
-- **答案可回读**：解值写在 `=` 右操作数上下文，`\+`/`let`/`;`/`,` 等优先级
-  高于 699 的项自动加括号（`X = (\+1)`、`X = (a;b)`、`X = (a,b)`）；`- 1`
-  显示为 `-1`。
+- `let`/`del`（1300）优先级高于 `:-`（1200），`let Head :- Body.` 无需括号。
+- `^`（200 xfy）是 bagof/setof 的存在量词运算符。
+- 运算符名可作复合项 functor（函数记法）：`+(2,3)` 解析为 `2+3`。
+- 复合项 functor 必须紧跟 `(`：`foo(a)` 是复合项，`foo (a)` 是语法错误。
+- 答案可回读：解值自动加括号保证重读无歧义（`X = (\+1)`、`X = (a;b)`）。
 
 ### 语义
 
@@ -116,10 +90,9 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
   逐解产出（`next_solution`）与无限程序（`length(L, N)` 逐解枚举）。
 - **cut（`!`）**：截断选择点栈到当前子句进入时的高度，剪除替代分支。
 - **否定即失败**：`\+ Goal` 子目标有解则失败，无解则成功（复用 `call/1`）。
-- **未绑定变量/数字不能作为目标**（如 `?- X.`、`?- 1.`），返回 `false.` 而非崩溃。
-- **紧凑输出**：列表 `[1,2,3]`、复合 `foo(bar,baz)`、符号运算符 `2+3`、
-  前缀 `-5`、`\+foo` 无多余空格；字母类运算符（`is`/`mod`）保留空格
-  （`2 is 3`）避免黏连。
+- **未绑定变量/数字不能作为目标**（如 `?- X.`、`?- 1.`），返回 `false.`。
+- **紧凑输出**：列表 `[1,2,3]`、`2+3`、`-5`、`\+foo` 无多余空格；字母类运算符
+  （`is`/`mod`）保留空格避免黏连；非标识符 functor 自动加引号。
 
 ## 内建谓词
 
@@ -127,11 +100,12 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 - 合一/比较：`=/2`、`\=/2`、`==/2`、`\==/2`
 - 项检查：`var/1`、`nonvar/1`、`atom/1`、`integer/1`、`atomic/1`、`compound/1`、`ground/1`
 - 算术：`is/2`、`=:=/2`、`=\=/2`、`</2`、`>/2`、`=</2`、`>=/2`、`between/3`
-- 列表：`:/2`（`X : [1,2,3]`，中缀成员）、`length/2`（双向）、`append/3`、`sort/2`（标准项序排序去重）、`keysort/2`（按键稳定排序，不去重）
-- 元编程：`findall/3`、`bagof/3`（按 witness 分组）、`setof/3`（排序去重）、`^/2`（存在量词）
-- 动态数据库：`let/1`（断言，对应 `assert`）、`del/1`（按谓词指示符 `Name/Arity` 删除全部子句）
-- 会话：`cls/0`（清屏）、`halt/0`（退出）、`consult/1`（加载 `name.love`，`[name].` 为其语法糖）
-- 输出（写入会话缓冲）：`write/1`、`writeln/1`、`nl/0`
+- 列表：`:/2`（`X : [1,2,3]` 中缀成员）、`length/2`（双向）、`append/3`、
+  `sort/2`（标准项序排序去重）、`keysort/2`（按键稳定排序，不去重）
+- 元编程：`findall/3`、`bagof/3`（按 witness 分组）、`setof/3`（排序去重）、`^/2`
+- 动态数据库：`let/1`（断言）、`del/1`（按 `Name/Arity` 删除全部子句）
+- 会话：`cls/0`（清屏）、`halt/0`（退出）、`consult/1`（加载 `name.love`）
+- 输出：`write/1`、`writeln/1`、`nl/0`
 - 字符串：`atom_length/2`、`char_code/2`
 
 ### bagof / setof 分组
@@ -159,11 +133,6 @@ nrev([H | T], R) :- nrev(T, R1), append(R1, [H], R).
 fact(0, 1).
 fact(N, F) :- N > 0, N1 is N - 1, fact(N1, F1), F is N * F1.
 
-% 斐波那契
-fib(0, 0).
-fib(1, 1).
-fib(N, F) :- N > 1, N1 is N - 1, N2 is N - 2, fib(N1, F1), fib(N2, F2), F is F1 + F2.
-
 % 剪枝：p(X) 只给出 X = 1
 p(X) :- q(X), !.
 q(1).  q(2).
@@ -178,12 +147,11 @@ L = [10,20,30].
 
 | 函数 | 说明 |
 |---|---|
+| `Database()` / `Session(db)` | 创建数据库 / 会话 |
 | `program_from_text(src)` | 从子句文本创建数据库 |
-| `load_program(db, src)` | 把子句文本原地加载进已有数据库 |
-| `load_text(session, src)` | 加载进会话的数据库（`[file].` 导入用） |
-| `query(session, query_text)` | 从查询文本创建求解引擎 |
-| `next_solution(engine)` | 逐步产出解（`Env?`），支持逐解枚举 |
-| `solve_all(engine)` | 收集全部解 |
+| `load_program(db, src)` / `load_text(session, src)` | 把子句文本原地加载进数据库 |
+| `query(session, query_text)` | 从查询文本创建求解引擎（裸目标，不含 `?-`） |
+| `next_solution(engine)` / `solve_all(engine)` | 逐解产出（`Env?`）/ 收集全部解 |
 | `answers_string(session, query, out)` | 生成答案文本（REPL/测试用） |
 | `engine_vars(engine)` | 查询中的顶层变量名 |
 | `parse_program_text` / `parse_clause_text` / `parse_query_text` / `lex` | 解析入口 |
@@ -197,13 +165,13 @@ L = [10,20,30].
 | 文件 | 职责 |
 |---|---|
 | `ops.mbt` | 运算符表（优先级/结合性） |
-| `token.mbt` / `lexer.mbt` | 词法分析 |
+| `token.mbt` / `lexer.mbt` | 词法分析（含 OpenCT 紧凑括号区分） |
 | `term.mbt` | 项表示、展示（列表/运算符/引号规则） |
-| `parser.mbt` | 递归下降 + 优先级爬升（含函数记法 `+(2,3)`） |
+| `parser.mbt` | 递归下降 + 优先级爬升（函数记法、括号隔离标记、惰性 `flatten`） |
 | `unify.mbt` | 合一（持久化 HashMap + occurs check）、标准项序 `term_compare` |
-| `engine.mbt` | 数据库（`(name/arity)` → 子句列表）、会话、选择点栈求解引擎 |
+| `engine.mbt` | 数据库、会话、链表目标队列、选择点栈求解引擎 |
 | `builtins.mbt` | 内建谓词（call/bagof/setof 复用目标展开，`:/2` 等用伪子句实现双向性） |
-| `api.mbt` | 顶层 API（`program_from_text`、`answers_string`） |
+| `api.mbt` | 顶层 API |
 | `cmd/main/` | 交互式 REPL（native + async stdio） |
 
 ## 测试
@@ -213,8 +181,8 @@ moon test          # 36 个测试
 moon coverage analyze > uncovered.log   # 查看未覆盖代码
 ```
 
-覆盖：解析（运算符优先级、函数记法、列表糖、匿名变量、前缀优先级约束）、
-合一（occurs check、重复变量）、经典递归（nrev/factorial/fibonacci）、
-cut 语义、否定即失败、call、findall/bagof/setof（分组/排序去重/`^` 量化）、
-between、析取、动态数据库（let/del）、会话谓词（cls/halt/consult）、
-变量/数字目标失败、紧凑输出与括号可回读等。
+覆盖解析（运算符优先级、函数记法、OpenCT 紧凑括号、列表糖、括号隔离）、合一
+（occurs check）、经典递归（nrev/factorial/fibonacci）、cut 语义、否定即失败、
+call、findall/bagof/setof（分组/排序去重/`^` 量化）、sort/keysort、动态数据库
+（let/del）、会话谓词（cls/halt/consult）、变量/数字目标失败、紧凑输出与括号
+可回读等。
