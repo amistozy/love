@@ -146,7 +146,7 @@ L = [10,20,30].
 | `program_from_text(src)` | 从子句文本创建数据库 |
 | `load_program(db, src)` / `load_text(session, src)` | 把子句文本原地加载进数据库 |
 | `query(session, query_text)` | 从查询文本创建求解引擎（裸目标，不含 `?-`） |
-| `next_solution(engine)` / `solve_all(engine)` | 逐解产出（`Env?`）/ 收集全部解 |
+| `next_solution(engine)` / `solve_all(engine)` | 逐解产出（`Env?`）/ 全部解的惰性迭代器（`Iter[Env]`） |
 | `answers_string(session, query, out)` | 生成答案文本（REPL/测试用） |
 | `engine_vars(engine)` | 查询中的顶层变量名 |
 | `parse_program_text` / `parse_clause_text` / `parse_query_text` / `lex` | 解析入口 |

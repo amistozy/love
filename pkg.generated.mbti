@@ -35,7 +35,7 @@ pub fn program_from_text(String) -> Database raise LoveError
 
 pub fn query(Session, String) -> Engine raise LoveError
 
-pub fn solve_all(Engine) -> Array[@hashmap.HashMap[String, Term]]
+pub fn solve_all(Engine) -> Iter[@hashmap.HashMap[String, Term]]
 
 pub fn term_compare(Term, Term, @hashmap.HashMap[String, Term]) -> Int
 

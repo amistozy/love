@@ -434,21 +434,14 @@ fn Engine::backtrack(self : Engine) -> Bool {
 }
 
 ///|
-/// 收集当前查询的所有解
-pub fn solve_all(e : Engine) -> Array[Env] {
-  let out = []
-  for ;; {
-    match e.next_solution() {
-      Some(env) => out.push(env)
-      None => break
-    }
-  }
-  out
+/// 当前查询的所有解的惰性迭代器（按需推进 `next_solution`，不物化数组）
+pub fn solve_all(e : Engine) -> Iter[Env] {
+  Iter::new(() => e.next_solution())
 }
 
 ///|
-/// 在子会话中求解：返回所有解的环境
-fn sub_solve_all(e : Engine, goals : @list.List[Term], env : Env) -> Array[Env] {
+/// 在子会话中求解：所有解的环境的惰性迭代器
+fn sub_solve_all(e : Engine, goals : @list.List[Term], env : Env) -> Iter[Env] {
   let sub = Engine::new(e.session, goals, env)
   solve_all(sub)
 }

@@ -441,7 +441,7 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
       guard args is [t, goal, l] else { Fail }
       // 复用 call/1 执行任意目标（含 `,` 复合），
       // 等价于 Scryer 的 `'$iterate_find_all'` 里的 `call(Goal)`
-      let envs = sub_solve_all(e, @list.List([Compound("call", [goal])]), e.env)
+      let envs = sub_solve_all(e, @list.List([Compound("call", [goal])]), e.env).to_array()
       let terms = envs.map(env => walk_deep(t, env))
       let list = make_list(terms)
       match unify(l, list, e.env) {
@@ -458,7 +458,7 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
         e,
         @list.List([Compound("call", [strip_existential(goal)])]),
         e.env,
-      )
+      ).to_array()
       if envs.is_empty() {
         Fail
       } else if witness.is_empty() {
@@ -500,7 +500,7 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
         e,
         @list.List([Compound("call", [strip_existential(goal)])]),
         e.env,
-      )
+      ).to_array()
       if envs.is_empty() {
         Fail
       } else if witness.is_empty() {
@@ -513,6 +513,7 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
           None => Fail
         }
       } else {
+        // 按 witness 绑定分组
         let groups : Array[Array[Env]] = []
         for env in envs {
           let mut placed = false
