@@ -218,6 +218,21 @@ test "bagof setof between" {
   |> inspect(content="L = [1,2]")
   @love.answers_string(session, "setof(X-Y, f(X, Y), L).", out)
   |> inspect(content="L = [1-2,1-3,2-4]")
+  // sort/2：标准项序排序 + 去重
+  @love.answers_string(session, "sort([3,1,2,1], L).", out)
+  |> inspect(content="L = [1,2,3]")
+  @love.answers_string(session, "sort([b,a,c,a], L).", out)
+  |> inspect(content="L = [a,b,c]")
+  @love.answers_string(session, "sort([], L).", out)
+  |> inspect(content="L = []")
+  // keysort/2：按键（稳定）排序，不去重
+  @love.answers_string(session, "keysort([2-b,1-a,2-a], L).", out)
+  |> inspect(content="L = [1-a,2-b,2-a]")
+  // sort/keysort 输入非闭合列表 → 失败
+  @love.answers_string(session, "sort(notalist, L).", out)
+  |> inspect(content="false")
+  @love.answers_string(session, "keysort([1-x, 2], L).", out)
+  |> inspect(content="false")
 }
 
 ///|

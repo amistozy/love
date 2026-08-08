@@ -127,7 +127,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 - 合一/比较：`=/2`、`\=/2`、`==/2`、`\==/2`
 - 项检查：`var/1`、`nonvar/1`、`atom/1`、`integer/1`、`atomic/1`、`compound/1`、`ground/1`
 - 算术：`is/2`、`=:=/2`、`=\=/2`、`</2`、`>/2`、`=</2`、`>=/2`、`between/3`
-- 列表：`:/2`（`X : [1,2,3]`，中缀成员）、`length/2`（双向）、`append/3`
+- 列表：`:/2`（`X : [1,2,3]`，中缀成员）、`length/2`（双向）、`append/3`、`sort/2`（标准项序排序去重）、`keysort/2`（按键稳定排序，不去重）
 - 元编程：`findall/3`、`bagof/3`（按 witness 分组）、`setof/3`（排序去重）、`^/2`（存在量词）
 - 动态数据库：`let/1`（断言，对应 `assert`）、`del/1`（按谓词指示符 `Name/Arity` 删除全部子句）
 - 会话：`cls/0`（清屏）、`halt/0`（退出）、`consult/1`（加载 `name.love`，`[name].` 为其语法糖）

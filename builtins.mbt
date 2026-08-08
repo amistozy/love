@@ -67,6 +67,23 @@ fn make_list(terms : Array[Term]) -> Term {
 }
 
 ///|
+/// 把闭合列表收集为数组；非列表/非闭合返回 None（sort/keysort 输入检查）。
+fn list_to_array(t : Term, env : Env) -> Array[Term]? {
+  let out = []
+  let mut cur = walk(t, env)
+  for ;; {
+    match cur {
+      Atom("[]") => return Some(out)
+      Compound(".", [h, tl]) => {
+        out.push(walk_deep(h, env))
+        cur = walk(tl, env)
+      }
+      _ => return None
+    }
+  }
+}
+
+///|
 /// 判断项是否为闭合列表（`[]` 或 `.` 链且尾为 `[]`）
 fn is_closed_list(t : Term, env : Env) -> Bool {
   match walk(t, env) {
@@ -377,6 +394,43 @@ fn builtin_table() -> Map[String, (Array[Term], Engine) -> BuiltinResult] {
           @list.List([Compound("append", [t1, b, r1])]),
         ),
       ])
+    },
+    "sort/2": (args, e) => {
+      // sort(List, Sorted)：标准项序排序 + 去重（参考 Scryer dispatch.rs sort）
+      guard args is [list, sorted] else { Fail }
+      match list_to_array(walk(list, e.env), e.env) {
+        Some(ts) => {
+          let s = dedup_terms(sort_terms(ts, e.env), e.env)
+          match unify(sorted, make_list(s), e.env) {
+            Some(env) => SucceedEnv(env)
+            None => Fail
+          }
+        }
+        None => Fail
+      }
+    },
+    "keysort/2": (args, e) => {
+      // keysort(List, Sorted)：元素为 `Key-Value` 对，按键（稳定）排序，不去重
+      // （参考 Scryer dispatch.rs keysort）
+      guard args is [list, sorted] else { Fail }
+      match list_to_array(walk(list, e.env), e.env) {
+        Some(ts) => {
+          let pairs = []
+          for t in ts {
+            match t {
+              Compound("-", [k, _]) => pairs.push((k, t))
+              _ => return Fail
+            }
+          }
+          pairs.sort_by((a, b) => term_compare(a.0, b.0, e.env))
+          let out = pairs.map(p => p.1)
+          match unify(sorted, make_list(out), e.env) {
+            Some(env) => SucceedEnv(env)
+            None => Fail
+          }
+        }
+        None => Fail
+      }
     },
     "call/1": (args, e) => {
       // call(Goal) = 把 Goal 作为目标执行（`,` 复合展开为目标序列）
