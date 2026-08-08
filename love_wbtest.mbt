@@ -173,3 +173,21 @@ test "write shows operator terms" {
   answers_string(session, "write(2 + 3).", out) |> inspect(content="true")
   out.to_string() |> inspect(content="2+3")
 }
+
+///|
+test "openct prefix vs spaced paren" {
+  // 运算符名后紧跟 `(`（OpenCT）按函数记法解析：`,` 是目标分隔符
+  // 对应 Scryer `':'(','(:-(a),b))` 的行为
+  let t1 = parse_query_text("let(a), b.")
+  inspect(t1.length(), content="2")
+  guard t1.head() is Some(Compound("let", [Atom("a")])) else {
+    fail("let(a) should be function notation")
+  }
+  // 运算符名后跟空格 `(`：作为前缀运算符吸收括号项与逗号
+  // 对应 Scryer `:-(','(a,b))` 的行为
+  let t2 = parse_query_text("let (a), b.")
+  inspect(t2.length(), content="1")
+  guard t2.head() is Some(Compound("let", [Compound(",", [Atom("a"), _])])) else {
+    fail("let (a), b should be absorbed as single arg")
+  }
+}

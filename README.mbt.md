@@ -77,7 +77,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 
 - `let`（1300）优先级高于 `:-`（1200），`let Head :- Body.` 无需括号。
 - `^`（200 xfy）是 bagof/setof 的存在量词运算符。
-- 运算符名可作复合项 functor（函数记法）：`+(2,3)` 解析为 `2+3`。
+- 运算符名可作复合项 functor（函数记法）：`+(2,3)` 解析为 `2+3`；运算符名后紧跟 `(`（OpenCT）时按函数记法解析、不作为前缀运算符——`let(foo), X = 1.` 中 `,` 是目标分隔符（对照 `let (foo), X = 1.` 中 `,` 是 `let` 的参数）。
 - 复合项 functor 必须紧跟 `(`：`foo(a)` 是复合项，`foo (a)` 是语法错误。
 - 答案可回读：解值自动加括号保证重读无歧义（`X = (\+1)`、`X = (a;b)`）。
 
@@ -98,7 +98,7 @@ grandparent(X, Y) :- parent(X, Z), parent(Z, Y).   % 规则
 - 算术：`is/2`、`=:=/2`、`=\=/2`、`</2`、`>/2`、`=</2`、`>=/2`、`between/3`
 - 列表：`:/2`（`X : [1,2,3]` 中缀成员）、`length/2`（双向）、`append/3`、`sort/2`（标准项序排序去重）、`keysort/2`（按键稳定排序，不去重）
 - 元编程：`findall/3`、`bagof/3`（按 witness 分组）、`setof/3`（排序去重）、`^/2`
-- 动态数据库：`let/1`（断言）、`del/1`（按 `Name/Arity` 删除全部子句）、`del/0`（清空数据库）
+- 动态数据库：`let/1`（断言）、`del/1`（按 `Name/Arity` 删除全部子句）、`del/0`（清空数据库）、`listing/1`（列出谓词定义）
 - 会话：`cls/0`（清屏）、`halt/0`（退出）、`consult/1`（加载 `name.love`）
 - 输出：`write/1`、`writeln/1`、`nl/0`
 - 字符串：`atom_length/2`、`char_code/2`

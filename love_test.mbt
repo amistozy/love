@@ -356,6 +356,48 @@ test "let and del builtins" {
 }
 
 ///|
+test "listing builtin" {
+  let session = @love.Session(@love.Database())
+  let out = StringBuilder()
+  // 断言事实与规则
+  @love.answers_string(session, "let parent(tom, bob).", out)
+  |> inspect(content="true")
+  @love.answers_string(session, "let parent(bob, ann) :- true.", out)
+  |> inspect(content="true")
+  // 列出 parent/2 的全部子句（输出到会话缓冲，每行一个子句）
+  @love.answers_string(session, "listing(parent/2).", out)
+  |> inspect(content="true")
+  out.to_string()
+  |> inspect(content="parent(tom,bob).\nparent(bob,ann) :- true.\n")
+  // 不存在的谓词失败
+  @love.answers_string(session, "listing(nope/3).", out)
+  |> inspect(content="false")
+  // 非谓词指示符参数失败
+  @love.answers_string(session, "listing(foo).", out)
+  |> inspect(content="false")
+}
+
+///|
+test "let asserts a single clause" {
+  let session = @love.Session(@love.Database())
+  let out = StringBuilder()
+  // `let(foo), X = 1.`：`(` 紧凑跟随（OpenCT），`,` 是目标分隔符而非 let 参数
+  @love.answers_string(session, "let(foo), X = 1.", out)
+  |> inspect(content="X = 1")
+  @love.answers_string(session, "foo.", out) |> inspect(content="true")
+  // 规则断言与子句体内逗号吸收不受影响
+  @love.answers_string(session, "let bar(X) :- X = 1.", out)
+  |> inspect(content="true")
+  @love.answers_string(session, "bar(Y).", out) |> inspect(content="Y = 1")
+  @love.answers_string(session, "let baz(X) :- X = 1, X = 2.", out)
+  |> inspect(content="true")
+  @love.answers_string(session, "baz(Z).", out) |> inspect(content="false")
+  // 空格括号形式 `let (qux).` 仍断言 qux/0
+  @love.answers_string(session, "let (qux).", out) |> inspect(content="true")
+  @love.answers_string(session, "qux.", out) |> inspect(content="true")
+}
+
+///|
 test "variable or number as goal fails" {
   let session = @love.Session(@love.Database())
   let out = StringBuilder()

@@ -19,6 +19,11 @@ fn Parser::peek(self : Parser) -> Token {
 }
 
 ///|
+fn Parser::peek2(self : Parser) -> Token {
+  self.tokens[self.pos + 1]
+}
+
+///|
 fn Parser::advance(self : Parser) -> Token {
   let t = self.tokens[self.pos]
   self.pos = self.pos + 1
@@ -193,15 +198,20 @@ fn Parser::parse_term_marked(
 /// 解析前缀运算符或基本项。
 /// 仅在 `prec <= max_prec` 时吸收（ISO：`X = \+ 1` 中 `\+` 900 超过
 /// `=` 右操作数 699 的允许范围，报语法错误；顶层 max_prec 1300 允许 let）。
-
-///|
+/// 运算符名后紧跟 `(`（OpenCT）时按函数记法解析为复合项 `name(args)`，
+/// 不作为前缀运算符（ISO open_ct，参照 Scryer shift_op 对 OpenCT 的处理）：
+/// `let(foo), X = 1.` 中 `,` 是目标分隔符而非 let 的参数。
 fn Parser::parse_prefix_marked(
   self : Parser,
   max_prec : Int,
 ) -> (Term, Bool) raise LoveError {
   match peek_prefix(self) {
     Some((name, prec, assoc)) =>
-      if prec <= max_prec {
+      // 运算符名后紧跟 `(`（OpenCT）：函数记法复合项，不是前缀运算符
+      if self.peek2() is Token::OpenCT {
+        let _ = self.advance()
+        (Compound(name, self.parse_args()), false)
+      } else if prec <= max_prec {
         let _ = self.advance()
         let arg_max = match assoc {
           Fy => prec
