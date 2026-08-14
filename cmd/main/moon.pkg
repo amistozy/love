@@ -7,4 +7,11 @@ import {
   "moonbitlang/async/stdio",
 }
 
+supported_targets = "-all+native"
+
 pkgtype(kind: "executable")
+
+options(
+  "native-stub": [ "stub.c" ],
+  targets: { "tty.mbt": [ "native" ] },
+)

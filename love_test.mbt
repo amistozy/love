@@ -411,6 +411,23 @@ test "dynamic rules via assert" {
 // ---------- 字符串与控制流 ----------
 
 ///|
+test "solution.more reflects pending choices" {
+  let p = parse_program("")
+  // 确定性：无剩余 choice point
+  let sols = solve_all(p, parse_query("X = 42."))
+  assert_eq(sols.length(), 1)
+  assert_true(!sols[0].more)
+  // 非确定性：member 还有未试子句
+  let sols2 = solve_all(p, parse_query("member(X, [1, 2])."))
+  assert_eq(sols2.length(), 2)
+  assert_true(sols2[0].more)
+  // 递归谓词：存在剩余 choice point（即使后续会失败）——与 Scryer 的 B 寄存器语义一致
+  let sols3 = solve_all(p, parse_query("append([1, 2], [3], L)."))
+  assert_eq(sols3.length(), 1)
+  assert_true(sols3[0].more)
+}
+
+///|
 test "strings are terms" {
   assert_eq(qs_of("S = \"abc\".")[0], "\"abc\" = \"abc\"")
   assert_true(qs_of("string(\"abc\").").length() == 1)

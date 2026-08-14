@@ -77,6 +77,7 @@ pub fn Program::new() -> Self
 pub struct Solution {
   query : LoveTerm
   bindings : Map[Int, LoveTerm]
+  more : Bool
 }
 
 // Type aliases

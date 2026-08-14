@@ -202,17 +202,24 @@ moon run cmd/main -- prog.lv "?- happy(X)."   # 运行单个查询并打印全�
 模块默认目标为 native（`moon.mod` 中 `preferred_target = "native"`），无需指定
 `--target`；库代码本身保持目标无关，仍可用 `moon build --target wasm` 交叉构建。
 
-REPL 交互：
+REPL 交互参考 **Scryer Prolog** 的 toplevel：提示符 `?- `，多行输入续行提示 `|  `；
+答案后跟 `;` 表示还有解（等待输入）、`.` 表示确定解（无剩余 choice point）。
 
 ```
-Love> happy(X).
-X = alice
-X = bob
-false
-Love> X = 1 + 2, write(X), nl.
-3
-X = 1 + 2
+?- happy(X).
+   X = alice ;
+;
+   X = bob ;
+.
+;  ... .
+?- X = 1 + 2, write(X), nl.
+   3.
+   X = 3.
 ```
+
+答案后的按键：`;`/空格/`n` 下一个解，`Enter`/`.` 停止（显示 `;  ... .`），`a` 全部，
+`f` 再 5 个，`h` 帮助。确定性判断基于 choice point 是否耗尽（对应 Scryer 用 WAM
+B 寄存器比较：`B0 == B` 时为最终解）。
 
 ## 6. 与 ISO Prolog 的已知差异（v0.1）
 

@@ -11,10 +11,12 @@
 /// ```
 
 ///|
-/// 一个解：解引用后的查询项 + 查询变量的绑定。
+/// 一个解：解引用后的查询项 + 查询变量的绑定 + 是否还有未耗尽的 choice point。
 pub struct Solution {
   query : LoveTerm
   bindings : Map[Int, LoveTerm]
+  /// 是否可能还有更多解（供 REPL 判断答案后跟 `;` 还是 `.`）
+  more : Bool
 }
 
 ///|
@@ -31,7 +33,7 @@ pub fn solve(program : Program, query : LoveTerm) -> Iter[Solution] {
         for id in var_ids {
           bindings[id] = engine.subst.deref(LoveTerm::Var(id))
         }
-        Some({ query: q, bindings })
+        Some({ query: q, bindings, more: engine.has_pending() })
       }
     }
   })

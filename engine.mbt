@@ -265,3 +265,28 @@ fn Engine::backtrack(engine : Engine) -> Bool {
     }
   }
 }
+
+///|
+/// 是否还有可能产生更多解：存在未耗尽的 choice point。
+/// （对应 Scryer Prolog 用 WAM B 寄存器判断确定性：B0 == B 时为最终解。）
+fn Engine::has_pending(engine : Engine) -> Bool {
+  for cp in engine.cps {
+    let pending = match cp.kind {
+      CPKind::NextClause(term, ci, _) => {
+        let name = match term {
+          LoveTerm::Atom(n) => n
+          LoveTerm::Struct(n, _) => n
+          _ => "$$"
+        }
+        ci < engine.program.clauses_of(name).length()
+      }
+      CPKind::PushTerm(_, _) => true
+      CPKind::ClauseScan(ci, _, _, all) => ci < all.length()
+      CPKind::EnumInt(lo, hi, _) => lo <= hi
+    }
+    if pending {
+      return true
+    }
+  }
+  false
+}

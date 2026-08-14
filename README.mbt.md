@@ -33,24 +33,42 @@ moon test
 
 ### REPL 示例
 
+REPL 交互参考 **Scryer Prolog** 的 toplevel：提示符 `?- `，多行输入续行提示 `|  `；
+答案独占一行（首个缩进 3 空格），后续答案以 `;  ` 开头（分号在行首），确定解以 `.` 结尾，
+枚举耗尽输出 `false.`，答案与下一个提示符之间空一行。
+
 ```
-Love> father(F, C).
-F = tom, C = bob
-;
-F = tom, C = lisa
-;
-F = bob, C = ann
-.
-Love> X is 1 + 2 * 3.
-X = 7
-Love> append([1, 2], [3], L).
-L = [1, 2, 3]
-Love> findall(X, member(X, [a, b, c]), L).
-L = [a, b, c]
-Love> halt.
+?- father(F, C).
+   F = tom, C = bob
+;  F = tom, C = lisa
+;  F = bob, C = ann
+;  ... .
+ 
+?- X is 1 + 2 * 3.
+   X = 7.
+
+?- append([1, 2], [3], L).
+   L = [1, 2, 3]
+;  false.
+
+?- findall(X, member(X, [a, b, c]), L).
+   L = [a, b, c].
+
+?- halt.
 ```
 
-输入 `;`（分号）获取下一个解，`.` 或其他输入停止枚举；`halt.` 退出 REPL。
+答案之后可输入的按键（与 Scryer 一致）：在**交互终端**中按单键即可，无需回车
+（原始模式读取，参考 Scryer 的 `get_single_char/1`；管道/重定向时自动退回按行读取）。
+
+| 按键 | 含义 |
+| --- | --- |
+| `;` / 空格 / `n` | 下一个解 |
+| `Enter` / `.` | 停止枚举（显示 `;  ... .`） |
+| `a` | 枚举全部解 |
+| `f` | 再显示 5 个解 |
+| `h` | 显示帮助 |
+
+查询支持多行输入：未以 `.` 结尾时会以 `|  ` 提示续行。`halt.` 或 Ctrl-D 退出。
 
 ## 语言速览
 
