@@ -18,17 +18,17 @@ Love 的目标不是复刻 ISO Prolog 的全部，而是用一套**小而完整*
 ### 构建与运行
 
 ```bash
-# 编译并运行（REPL 需要 native 目标）
-moon run cmd/main --target native
+# 编译并运行（模块默认 native 目标，直接运行即可）
+moon run cmd/main
 
 # 加载程序文件进入 REPL
-moon run cmd/main --target native -- examples/family.lv
+moon run cmd/main -- examples/family.lv
 
 # 批处理：运行单个查询并打印全部解
-moon run cmd/main --target native -- examples/family.lv "?- father(F, C)."
+moon run cmd/main -- examples/family.lv "?- father(F, C)."
 
 # 运行测试
-moon test --target native
+moon test
 ```
 
 ### REPL 示例

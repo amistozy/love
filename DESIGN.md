@@ -194,10 +194,13 @@ struct Engine {
 ## 5. CLI 用法
 
 ```
-moon run cmd/main --target native            # 空库启动 REPL
-moon run cmd/main --target native -- prog.lv  # 加载程序并进入 REPL
-moon run cmd/main --target native -- prog.lv "?- happy(X)."   # 运行单个查询并打印全部解
+moon run cmd/main            # 空库启动 REPL
+moon run cmd/main -- prog.lv  # 加载程序并进入 REPL
+moon run cmd/main -- prog.lv "?- happy(X)."   # 运行单个查询并打印全部解
 ```
+
+模块默认目标为 native（`moon.mod` 中 `preferred_target = "native"`），无需指定
+`--target`；库代码本身保持目标无关，仍可用 `moon build --target wasm` 交叉构建。
 
 REPL 交互：
 
