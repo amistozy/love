@@ -1,0 +1,17 @@
+% fib.lv —— 斐波那契
+fib(0, 0).
+fib(1, 1).
+fib(N, F) :-
+    N > 1,
+    N1 is N - 1,
+    N2 is N - 2,
+    fib(N1, F1),
+    fib(N2, F2),
+    F is F1 + F2.
+
+% 列表工具示例
+last_elem([X], X).
+last_elem([_ | T], X) :- last_elem(T, X).
+
+even_len([]).
+even_len([_, _ | T]) :- even_len(T).

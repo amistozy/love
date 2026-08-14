@@ -1,5 +1,10 @@
-// import {
-//   "amistozy/love" @lib,
-// }
+import {
+  "amistozy/love",
+  "moonbitlang/async",
+  "moonbitlang/core/env",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/x/fs",
+  "moonbitlang/async/stdio",
+}
 
 pkgtype(kind: "executable")

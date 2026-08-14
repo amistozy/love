@@ -5,9 +5,10 @@
 //   moon add moonbitlang/x
 //
 // Or manually declare it in `import`, for example:
-// import {
-//   "moonbitlang/x@0.4.6",
-// }
+import {
+  "moonbitlang/x@0.4.48",
+  "moonbitlang/async@0.20.3",
+}
 
 name = "amistozy/love"
 
@@ -19,7 +20,7 @@ repository = ""
 
 license = "Apache-2.0"
 
-keywords = []
+keywords = [ ]
 
 preferred_target = "wasm"
 

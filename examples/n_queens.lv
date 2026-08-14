@@ -1,0 +1,31 @@
+% n_queens.lv —— N 皇后问题
+% 用法：?- queens(4, Q).  （4 皇后）
+
+queens(N, Qs) :-
+    numlist(1, N, Ns),
+    queens(Ns, [], Qs).
+
+% 逐列放置皇后，用差分列表检查对角线
+queens([], Qs, Qs).
+queens(Unplaced, Safe, Qs) :-
+    select(X, Unplaced, Rest),
+    no_attack(X, Safe, 1),
+    queens(Rest, [X | Safe], Qs).
+
+no_attack(_, [], _).
+no_attack(X, [Y | Ys], D) :-
+    X =\= Y + D,
+    X =\= Y - D,
+    D1 is D + 1,
+    no_attack(X, Ys, D1).
+
+% 生成 1..N 的列表
+numlist(L, H, []) :- L > H.
+numlist(L, H, [L | T]) :-
+    L =< H,
+    L1 is L + 1,
+    numlist(L1, H, T).
+
+% select(X, List, Rest)：从列表中选出 X
+select(X, [X | T], T).
+select(X, [H | T], [H | R]) :- select(X, T, R).

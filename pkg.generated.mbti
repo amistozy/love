@@ -1,0 +1,84 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "amistozy/love"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn format_clause(Clause) -> String
+
+pub fn format_solution(Solution, Map[Int, String]) -> String
+
+pub fn format_term(LoveTerm) -> String
+
+pub fn format_term_with_names(LoveTerm, Map[Int, String]) -> String
+
+pub fn list_of(Array[LoveTerm]) -> LoveTerm
+
+pub fn list_of_with_tail(Array[LoveTerm], LoveTerm) -> LoveTerm
+
+pub fn load_directives(Program) -> Unit
+
+pub fn parse_clause(String) -> Clause raise LoveError
+
+pub fn parse_program(String) -> Program raise LoveError
+
+pub fn parse_query(String) -> LoveTerm raise LoveError
+
+pub fn parse_query_with_names(String) -> (LoveTerm, Map[Int, String]) raise LoveError
+
+pub fn query_var_ids(LoveTerm) -> Array[Int]
+
+pub fn run_query(Program, String) -> Array[Solution] raise LoveError
+
+pub fn solve(Program, LoveTerm) -> Iter[Solution]
+
+pub fn solve_all(Program, LoveTerm) -> Array[Solution]
+
+pub fn solve_terms(Program, LoveTerm) -> Array[LoveTerm]
+
+// Errors
+pub(all) suberror LoveError {
+  LexError(pos~ : Int, String)
+  ParseError(pos~ : Int, String)
+} derive(@debug.Debug)
+pub impl Show for LoveError
+
+// Types and methods
+pub struct Clause {
+  head : LoveTerm
+  body : LoveTerm
+} derive(@debug.Debug)
+
+pub enum LoveTerm {
+  Var(Int)
+  Atom(String)
+  Int(Int64)
+  Float(Double)
+  Str(String)
+  Struct(String, Array[LoveTerm])
+  ListCons(LoveTerm, LoveTerm)
+  ListNil
+} derive(@debug.Debug)
+
+pub struct PredClauses {
+  statics : Array[Clause]
+  dynamics : Array[Clause]
+}
+
+pub struct Program {
+  preds : Map[String, PredClauses]
+  directives : Array[LoveTerm]
+}
+pub fn Program::empty() -> Self
+pub fn Program::new() -> Self
+
+pub struct Solution {
+  query : LoveTerm
+  bindings : Map[Int, LoveTerm]
+}
+
+// Type aliases
+
+// Traits

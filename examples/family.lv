@@ -1,0 +1,23 @@
+% family.lv —— 家庭关系示例
+parent(tom, bob).
+parent(tom, lisa).
+parent(bob, ann).
+parent(bob, pat).
+parent(pat, jim).
+
+male(tom).
+male(bob).
+male(pat).
+male(jim).
+female(lisa).
+female(ann).
+
+father(F, C) :- parent(F, C), male(F).
+mother(M, C) :- parent(M, C), female(M).
+
+grandparent(G, C) :- parent(G, P), parent(P, C).
+sibling(A, B) :- parent(P, A), parent(P, B), A \= B.
+
+% 递归：祖先
+ancestor(A, D) :- parent(A, D).
+ancestor(A, D) :- parent(A, P), ancestor(P, D).

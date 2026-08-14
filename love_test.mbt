@@ -1,3 +1,435 @@
-// Blackbox tests run against the package's public API. Use `@love` to import.
-// Prefer high-level behaviors over implementation details.
-// Run `moon test` to execute and `moon test --update` to refresh snapshots.
+///|
+/// Love 语言黑盒测试：解析、合一、求解、内置谓词与算术。
+
+///|
+/// 便捷助手：解析程序与查询，返回每个解的解引用查询项的格式化字符串。
+fn sols_of(
+  program_src : String,
+  query_src : String,
+) -> Array[String] raise LoveError {
+  let p = parse_program(program_src)
+  let q = parse_query(query_src)
+  solve_terms(p, q).map(fn(t) { format_term(t) })
+}
+
+///|
+/// 便捷助手：只给查询（空程序 + 内置库）。
+fn qs_of(query_src : String) -> Array[String] raise LoveError {
+  sols_of("", query_src)
+}
+
+///|
+/// 解析查询并带变量名格式化（解析测试用）。
+fn pq(src : String) -> String raise LoveError {
+  let (t, names) = parse_query_with_names(src)
+  format_term_with_names(t, names)
+}
+
+// ---------- 解析 ----------
+
+///|
+test "parse: facts, rules, operators" {
+  let src =
+    #|likes(alice, bob).
+    #|happy(X) :- likes(X, bob).
+    #|sum(X, Y, Z) :- Z is X + Y.
+    #|
+  let p = parse_program(src)
+  assert_true(p.preds.contains("likes"))
+  assert_true(p.preds.contains("happy"))
+  assert_true(p.preds.contains("sum"))
+}
+
+///|
+test "parse: operator precedence" {
+  assert_eq(pq("E = a - b - c."), "E = a - b - c")
+  assert_eq(pq("E = (a, b, c)."), "E = (a, b, c)")
+  assert_eq(pq("E = a + b * c."), "E = a + b * c")
+}
+
+///|
+test "parse: lists" {
+  assert_eq(pq("L = [1, 2, 3]."), "L = [1, 2, 3]")
+  assert_eq(pq("L = [a | T]."), "L = [a | T]")
+  assert_eq(pq("L = [a, b | T]."), "L = [a, b | T]")
+  assert_eq(pq("L = []."), "L = []")
+}
+
+///|
+test "parse: quoted atoms and strings" {
+  assert_eq(pq("A = 'hello world'."), "A = 'hello world'")
+  assert_eq(pq("S = \"hi\"."), "S = \"hi\"")
+  assert_eq(pq("A = 'it''s'."), "A = 'it''s'")
+}
+
+///|
+test "parse: comments" {
+  let src =
+    #|% 行注释
+    #|/* 块
+    #|   注释 */
+    #|a(1). % 尾部注释
+    #|
+  let p = parse_program(src)
+  assert_true(p.preds.contains("a"))
+}
+
+///|
+test "parse: negative numbers and floats" {
+  let sols = qs_of("X is -5.")
+  assert_eq(sols[0], "-5 is -5")
+}
+
+// ---------- 合一 ----------
+
+///|
+test "unify: = binds and checks" {
+  assert_eq(qs_of("X = 42.")[0], "42 = 42")
+  assert_true(qs_of("X = Y, Y = hello.").length() == 1)
+  assert_true(qs_of("a = b.").is_empty())
+  assert_true(qs_of("X = a, X = b.").is_empty())
+  assert_true(qs_of("f(X, b) = f(a, Y).").length() == 1)
+  assert_true(qs_of("a \\= b.").length() == 1)
+  assert_true(qs_of("X \\= X.").is_empty())
+  assert_true(qs_of("a == a.").length() == 1)
+  assert_true(qs_of("a == b.").is_empty())
+  assert_true(qs_of("X == X.").length() == 1)
+  assert_true(qs_of("f(X) == f(Y).").is_empty())
+}
+
+///|
+test "occurs check: X = f(X) fails" {
+  assert_true(qs_of("X = f(X).").is_empty())
+  assert_true(qs_of("unify_with_occurs_check(X, f(X)).").is_empty())
+}
+
+// ---------- 求解 ----------
+
+///|
+test "solve: facts and simple rules" {
+  let src =
+    #|parent(tom, bob).
+    #|parent(tom, lisa).
+    #|male(tom).
+    #|father(F, C) :- parent(F, C), male(F).
+    #|
+  let sols = sols_of(src, "?- father(F, C).")
+  assert_eq(sols.length(), 2)
+  assert_eq(sols[0], "father(tom, bob)")
+  assert_eq(sols[1], "father(tom, lisa)")
+}
+
+///|
+test "solve: recursive rules" {
+  let src =
+    #|edge(a, b).
+    #|edge(b, c).
+    #|edge(c, d).
+    #|path(X, Y) :- edge(X, Y).
+    #|path(X, Y) :- edge(X, Z), path(Z, Y).
+    #|
+  let sols = sols_of(src, "?- path(a, D).")
+  assert_eq(sols.length(), 3)
+  assert_eq(sols[0], "path(a, b)")
+  assert_eq(sols[1], "path(a, c)")
+  assert_eq(sols[2], "path(a, d)")
+}
+
+///|
+test "solve: multiple clauses and backtracking" {
+  let src =
+    #|color(red).
+    #|color(green).
+    #|color(blue).
+    #|
+  let sols = sols_of(src, "?- color(C).")
+  assert_eq(sols.length(), 3)
+}
+
+///|
+test "solve: conjunction and disjunction" {
+  assert_true(qs_of("member(X, [1, 2]), X > 1.").length() == 1)
+  assert_eq(qs_of("(X = a ; X = b).").length(), 2)
+  assert_eq(qs_of("(true ; fail ; true).").length(), 2)
+}
+
+// ---------- cut ----------
+
+///|
+test "cut: commits to choices" {
+  let src1 =
+    #|p(1).
+    #|p(2).
+    #|q(X) :- p(X).
+    #|
+  assert_eq(sols_of(src1, "?- q(X).").length(), 2)
+  let src2 =
+    #|p(1).
+    #|p(2).
+    #|q(X) :- p(X), !.
+    #|
+  assert_eq(sols_of(src2, "?- q(X).").length(), 1)
+}
+
+///|
+test "cut: if-then-else via ->" {
+  let src =
+    #|max(X, Y, M) :- (X > Y -> M = X ; M = Y).
+    #|
+  let sols = sols_of(src, "?- max(3, 7, M).")
+  assert_eq(sols[0], "max(3, 7, 7)")
+  let sols2 = sols_of(src, "?- max(9, 2, M).")
+  assert_eq(sols2[0], "max(9, 2, 9)")
+}
+
+///|
+test "negation as failure" {
+  assert_true(qs_of("\\+ (a = b).").length() == 1)
+  assert_true(qs_of("\\+ (a = a).").is_empty())
+  // 否定不绑定变量：解即为原查询项
+  let sols = qs_of("\\+ member(5, [1, 2]).")
+  assert_eq(sols.length(), 1)
+  assert_eq(sols[0], "\\+ member(5, [1, 2])")
+}
+
+// ---------- 算术 ----------
+
+///|
+test "arithmetic: is and comparisons" {
+  assert_eq(qs_of("X is 1 + 2 * 3.")[0], "7 is 1 + 2 * 3")
+  assert_eq(qs_of("X is (1 + 2) * 3.")[0], "9 is (1 + 2) * 3")
+  assert_eq(qs_of("X is 10 // 3.")[0], "3 is 10 // 3")
+  assert_eq(qs_of("X is 10 mod 3.")[0], "1 is 10 mod 3")
+  assert_eq(qs_of("X is 7 / 2.")[0], "3.5 is 7 / 2")
+  assert_eq(qs_of("X is 2 ^ 10.")[0], "1024 is 2 ^ 10")
+  assert_eq(qs_of("X is abs(-5).")[0], "5 is abs(-5)")
+  assert_eq(qs_of("X is sqrt(16).")[0], "4.0 is sqrt(16)")
+  assert_true(qs_of("3 < 5.").length() == 1)
+  assert_true(qs_of("5 =< 5.").length() == 1)
+  assert_true(qs_of("1 + 1 =:= 2.").length() == 1)
+  assert_true(qs_of("1 =:= 1.0.").length() == 1)
+  assert_true(qs_of("3 > 5.").is_empty())
+  assert_true(qs_of("X is 1 // 0.").is_empty())
+}
+
+///|
+test "arithmetic: between and plus" {
+  assert_eq(qs_of("between(1, 3, X).").length(), 3)
+  assert_true(qs_of("between(1, 3, 2).").length() == 1)
+  assert_true(qs_of("between(1, 3, 5).").is_empty())
+  assert_eq(qs_of("plus(1, 2, X).")[0], "plus(1, 2, 3)")
+  assert_eq(qs_of("plus(1, X, 3).")[0], "plus(1, 2, 3)")
+  assert_eq(qs_of("plus(X, 2, 5).")[0], "plus(3, 2, 5)")
+}
+
+///|
+test "arithmetic: float formatting" {
+  assert_eq(qs_of("X is 2.5 + 1.0.")[0], "3.5 is 2.5 + 1.0")
+  assert_eq(qs_of("X is 2.0 + 1.0.")[0], "3.0 is 2.0 + 1.0")
+}
+
+// ---------- 列表（内置库子句） ----------
+
+///|
+test "lists: member generates" {
+  let sols = qs_of("member(X, [a, b, c]).")
+  assert_eq(sols.length(), 3)
+  assert_eq(sols[0], "member(a, [a, b, c])")
+  assert_eq(sols[2], "member(c, [a, b, c])")
+  assert_true(qs_of("member(a, [a, b, c]).").length() == 1)
+}
+
+///|
+test "lists: append" {
+  assert_eq(
+    qs_of("append([1, 2], [3], L).")[0],
+    "append([1, 2], [3], [1, 2, 3])",
+  )
+  let sols = qs_of("append(A, B, [1, 2]).")
+  assert_eq(sols.length(), 3)
+}
+
+///|
+test "lists: length reverse sum" {
+  assert_eq(qs_of("length([a, b, c], N).")[0], "length([a, b, c], 3)")
+  assert_eq(qs_of("reverse([1, 2, 3], R).")[0], "reverse([1, 2, 3], [3, 2, 1])")
+  assert_eq(
+    qs_of("sum_list([1, 2, 3, 4], S).")[0],
+    "sum_list([1, 2, 3, 4], 10)",
+  )
+}
+
+///|
+test "lists: nth0 and nth1" {
+  assert_eq(qs_of("nth0(1, [a, b, c], X).")[0], "nth0(1, [a, b, c], b)")
+  assert_eq(qs_of("nth1(2, [a, b, c], X).")[0], "nth1(2, [a, b, c], b)")
+}
+
+///|
+test "lists: sort and msort" {
+  assert_eq(qs_of("sort([3, 1, 2, 1], L).")[0], "sort([3, 1, 2, 1], [1, 2, 3])")
+  assert_eq(
+    qs_of("msort([3, 1, 2, 1], L).")[0],
+    "msort([3, 1, 2, 1], [1, 1, 2, 3])",
+  )
+  assert_eq(qs_of("msort([b, a, c], L).")[0], "msort([b, a, c], [a, b, c])")
+}
+
+///|
+test "lists: maplist" {
+  assert_true(qs_of("maplist(atom, [a, b, c]).").length() == 1)
+  assert_true(qs_of("maplist(atom, [a, 1]).").is_empty())
+  assert_true(qs_of("maplist(=(1), [1, 1, 1]).").length() == 1)
+  assert_true(qs_of("maplist(=(X), [1, 1]), X = 1.").length() == 1)
+}
+
+// ---------- 项检查 ----------
+
+///|
+test "terms: inspection" {
+  assert_true(qs_of("var(X).").length() == 1)
+  assert_true(qs_of("var(a).").is_empty())
+  assert_true(qs_of("nonvar(a).").length() == 1)
+  assert_true(qs_of("atom(a).").length() == 1)
+  assert_true(qs_of("atom(foo_bar).").length() == 1)
+  assert_true(qs_of("number(42).").length() == 1)
+  assert_true(qs_of("number(3.14).").length() == 1)
+  assert_true(qs_of("integer(42).").length() == 1)
+  assert_true(qs_of("float(3.14).").length() == 1)
+  assert_true(qs_of("atomic(a).").length() == 1)
+  assert_true(qs_of("compound(f(a)).").length() == 1)
+  assert_true(qs_of("compound([a, b]).").length() == 1)
+  assert_true(qs_of("ground(f(a, b)).").length() == 1)
+  assert_true(qs_of("ground(f(X, b)).").is_empty())
+}
+
+///|
+test "terms: functor, arg, univ" {
+  assert_eq(qs_of("functor(foo(a, b), F, N).")[0], "functor(foo(a, b), foo, 2)")
+  // functor 生成：X 被绑定为 foo(_1, _2)
+  assert_true(
+    qs_of("functor(X, foo, 2), arg(1, X, A), arg(2, X, B).").length() == 1,
+  )
+  assert_eq(qs_of("arg(2, foo(a, b), X).")[0], "arg(2, foo(a, b), b)")
+  assert_eq(qs_of("X =.. [foo, a, b].")[0], "foo(a, b) =.. [foo, a, b]")
+  assert_eq(qs_of("foo(a, b) =.. L.")[0], "foo(a, b) =.. [foo, a, b]")
+}
+
+///|
+test "terms: atom ops" {
+  assert_eq(qs_of("atom_length(hello, N).")[0], "atom_length(hello, 5)")
+  assert_eq(
+    qs_of("atom_concat(foo, bar, X).")[0],
+    "atom_concat(foo, bar, foobar)",
+  )
+  assert_eq(
+    qs_of("atom_concat(foo, X, foobar).")[0],
+    "atom_concat(foo, bar, foobar)",
+  )
+  assert_eq(
+    qs_of("atom_concat(X, bar, foobar).")[0],
+    "atom_concat(foo, bar, foobar)",
+  )
+  assert_eq(
+    qs_of("sub_atom(hello, 1, 3, _, S).")[0],
+    "sub_atom(hello, 1, 3, 1, ell)",
+  )
+}
+
+///|
+test "terms: comparison and standard order" {
+  assert_eq(qs_of("compare(O, a, b).")[0], "compare(<, a, b)")
+  assert_eq(qs_of("compare(O, a, a).")[0], "compare(=, a, a)")
+  assert_eq(qs_of("compare(O, b, a).")[0], "compare(>, b, a)")
+  assert_true(qs_of("a @< b.").length() == 1)
+  assert_true(qs_of("1 @< a.").length() == 1)
+  assert_true(qs_of("f(a) @< f(b).").length() == 1)
+}
+
+// ---------- findall ----------
+
+///|
+test "findall collects solutions" {
+  // findall 的结果列表
+  assert_eq(
+    qs_of("findall(X, member(X, [1, 2, 3]), L).")[0],
+    "findall(_0, member(_0, [1, 2, 3]), [1, 2, 3])",
+  )
+  assert_eq(
+    qs_of("findall(X, (member(X, [1, 2]), X > 1), L).")[0],
+    "findall(_0, (member(_0, [1, 2]), _0 > 1), [2])",
+  )
+  assert_eq(qs_of("findall(X, fail, L).")[0], "findall(_0, fail, [])")
+  assert_eq(
+    qs_of("findall(f(X), member(X, [a, b]), L).")[0],
+    "findall(f(_0), member(_0, [a, b]), [f(a), f(b)])",
+  )
+}
+
+// ---------- 动态数据库 ----------
+
+///|
+test "assert and retract" {
+  let p = parse_program("")
+  let q = parse_query("assertz(cat(tom)), assertz(cat(pat)), cat(X).")
+  let sols = solve_terms(p, q)
+  assert_eq(sols.length(), 2)
+  let q2 = parse_query("retract(cat(tom)), cat(X).")
+  let sols2 = solve_all(p, q2)
+  assert_eq(sols2.length(), 1)
+  // X 应绑定为 pat（tom 已被 retract）
+  let ids = query_var_ids(q2)
+  match sols2[0].bindings.get(ids[0]) {
+    Some(LoveTerm::Atom("pat")) => ()
+    _ => fail("X should be bound to pat after retract")
+  }
+}
+
+///|
+test "clause enumerates" {
+  let p = parse_program("a(1). a(2) :- b.")
+  let q = parse_query("clause(a(X), B).")
+  let sols = solve_terms(p, q)
+  assert_eq(sols.length(), 2)
+}
+
+///|
+test "dynamic rules via assert" {
+  let p = parse_program("")
+  let q = parse_query(
+    "assertz((grand(X, Y) :- parent(X, Z), parent(Z, Y))), assertz(parent(a, b)), assertz(parent(b, c)), grand(a, G).",
+  )
+  let sols = solve_all(p, q)
+  assert_eq(sols.length(), 1)
+  let ids = query_var_ids(q)
+  match sols[0].bindings.get(ids[ids.length() - 1]) {
+    Some(LoveTerm::Atom("c")) => ()
+    _ => fail("G should be bound to c")
+  }
+}
+
+// ---------- 字符串与控制流 ----------
+
+///|
+test "strings are terms" {
+  assert_eq(qs_of("S = \"abc\".")[0], "\"abc\" = \"abc\"")
+  assert_true(qs_of("string(\"abc\").").length() == 1)
+}
+
+///|
+test "cut in if-then-else controls alternatives" {
+  let sols = qs_of("member(X, [1, 2, 3]), (X = 2 -> true ; fail).")
+  assert_eq(sols.length(), 1)
+}
+
+///|
+test "repeat with cut" {
+  let sols = qs_of("repeat, !, true.")
+  assert_eq(sols.length(), 1)
+}
+
+///|
+test "errors in arithmetic fail the goal" {
+  assert_true(qs_of("X is 1 + a.").is_empty())
+  assert_true(qs_of("X is 1 // 0.").is_empty())
+}
