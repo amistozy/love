@@ -221,6 +221,10 @@ REPL 交互参考 **Scryer Prolog** 的 toplevel：提示符 `?- `，多行输�
 `f` 再 5 个，`h` 帮助。确定性判断基于 choice point 是否耗尽（对应 Scryer 用 WAM
 B 寄存器比较：`B0 == B` 时为最终解）。
 
+交互终端（原始模式单字符输入，参考 Scryer 的 `get_single_char/1`）：
+`Backspace` 删除，`Ctrl-L` 清屏，`Ctrl-D` 退出，`Ctrl-C` 取消当前行；
+管道/重定向时自动退回按行读取。
+
 ## 6. 与 ISO Prolog 的已知差异（v0.1）
 
 1. 字符串 `"..."` 是字符串项，不是字符码列表；

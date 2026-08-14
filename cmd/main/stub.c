@@ -37,6 +37,35 @@ MOONBIT_FFI_EXPORT int32_t love_tty_isatty(void) {
   return love_is_tty() ? 1 : 0;
 }
 
+// 初始化终端：Windows 上启用 VT 处理（ANSI 转义可用）与 VT 输入（方向键等转义序列）。
+MOONBIT_FFI_EXPORT int32_t love_tty_init(void) {
+#ifdef _WIN32
+  HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
+  if (out == INVALID_HANDLE_VALUE) {
+    return -1;
+  }
+  DWORD omode = 0;
+  if (!GetConsoleMode(out, &omode)) {
+    return -1;
+  }
+  omode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+  if (!SetConsoleMode(out, omode)) {
+    return -1;
+  }
+  HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
+  if (in != INVALID_HANDLE_VALUE) {
+    DWORD imode = 0;
+    if (GetConsoleMode(in, &imode)) {
+      imode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
+      SetConsoleMode(in, imode);
+    }
+  }
+  return 0;
+#else
+  return 0;
+#endif
+}
+
 // 进入原始模式：关闭行缓冲与回显。成功返回 0，失败返回 -1。
 MOONBIT_FFI_EXPORT int32_t love_tty_raw_on(void) {
   if (!love_is_tty() || g_raw) {
@@ -91,20 +120,36 @@ MOONBIT_FFI_EXPORT int32_t love_tty_raw_off(void) {
 }
 
 // 读取一个字符（原始模式下无需回车）；EOF/错误返回 -1。
+// 归一化回车：\r 或 \r\n → \n（Windows 上非阻塞吞掉紧随的 \n，避免污染下一次输入）。
 MOONBIT_FFI_EXPORT int32_t love_tty_get_char(void) {
 #ifdef _WIN32
   char c = 0;
-  int n = _read(_fileno(stdin), &c, 1);
-  if (n <= 0) {
+  DWORD n = 0;
+  if (!ReadFile(g_console_in, &c, 1, &n, NULL) || n == 0) {
     return -1;
   }
-  return (int32_t)(unsigned char)c;
+  int ch = (int)(unsigned char)c;
+  if (ch == '\r') {
+    // 非阻塞检查紧随的 '\n'（CRLF 回车），有则一并消费
+    INPUT_RECORD rec;
+    DWORD num = 0;
+    if (PeekConsoleInput(g_console_in, &rec, 1, &num) && num > 0 &&
+      rec.EventType == KEY_EVENT && rec.Event.KeyEvent.bKeyDown &&
+      rec.Event.KeyEvent.uChar.UnicodeChar == L'\n') {
+      DWORD eaten = 0;
+      ReadConsoleInput(g_console_in, &rec, 1, &eaten);
+    }
+    return '\n';
+  }
+  return ch;
 #else
   char c = 0;
   ssize_t n = read(STDIN_FILENO, &c, 1);
   if (n <= 0) {
     return -1;
   }
-  return (int32_t)(unsigned char)c;
+  int ch = (int)(unsigned char)c;
+  // Unix 原始模式 Enter 一般为 \n；若为 \r 也归一化为 \n
+  return ch == '\r' ? '\n' : ch;
 #endif
 }
