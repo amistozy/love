@@ -42,6 +42,8 @@ REPL 交互参考 **Scryer Prolog** 的 toplevel：提示符 `?- `，多行输�
    F = tom, C = bob
 ;  F = tom, C = lisa
 ;  F = bob, C = ann
+;  F = bob, C = pat
+;  F = pat, C = jim
 ;  ... .
  
 ?- X is 1 + 2 * 3.
@@ -87,7 +89,8 @@ happy(X) :- likes(X, bob).
 
 % 查询（REPL 中直接输入）
 ?- happy(X).
-X = alice
+   X = alice
+;  false.
 ```
 
 ### 项
@@ -113,8 +116,9 @@ Love 内置与 ISO/SWI 兼容的运算符优先级表：`:-` `-->`(1200) `;`(110
 
 ```prolog
 ?- op(500, yfx, foo).
+   true.
 ?- X = a foo b.
-X = foo(a, b)
+   X = foo(a, b).
 ```
 
 ## 内置谓词
@@ -151,7 +155,8 @@ fib(N, F) :-
 
 ```prolog
 ?- fib(10, F).
-F = 55
+   F = 55
+;  false.
 ```
 
 ### 回溯与 cut
@@ -164,19 +169,18 @@ max(X, Y, M) :- (X > Y -> M = X ; M = Y).
 
 ```prolog
 ?- catch(throw(bad), bad, true).
-true
+   true.
 
 ?- catch(throw(x), y, true).   % x 与 y 不合一 → 未捕获 → 查询失败
-false
+   false.
 ```
 
 ### bagof/setof 分组收集
 
 ```prolog
 ?- bagof(X, member(X-Y, [1-a, 2-b, 3-a]), L).
-X = _0, Y = a, L = [1, 3]
-;
-X = _0, Y = b, L = [2]
+   X = _0, Y = a, L = [1, 3]
+;  X = _0, Y = b, L = [2].
 ```
 
 ### DCG 文法
@@ -187,20 +191,21 @@ s --> [].
 s --> [a], s, [b].
 
 ?- phrase(s, [a, a, b, b]).
-true
+   true
+;  false.
 ?- phrase(s, [a, b]).
-true
+   true
+;  false.
 ?- phrase(s, [a]).
-false
+   false.
 ```
 
 ### 动态数据库
 
 ```prolog
 ?- assertz(cat(tom)), assertz(cat(pat)), cat(X).
-X = tom
-;
-X = pat
+   X = tom
+;  X = pat.
 ```
 
 ## 实现架构
