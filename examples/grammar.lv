@@ -1,0 +1,7 @@
+% 一个简单的 DCG 文法：a^n b^n（n >= 0）
+% 用法：moon run cmd/main -- examples/grammar.lv "?- phrase(s, [a, a, b, b])."
+s --> [].
+s --> [a], s, [b].
+
+% 也可在 REPL 中：
+%   ?- phrase(s, L).    枚举所有 a^n b^n

@@ -1,19 +1,23 @@
 ///|
 /// 运算符结合性。
-priv enum OpSpec {
+pub enum OpSpec {
   /// xfx：两侧都严格高于该优先级
   XFX
   /// xfy：左高右低（右结合）
   XFY
   /// yfx：左低右高（左结合）
   YFX
+  /// fx：前缀，操作数优先级严格低于该优先级
+  FX
+  /// fy：前缀，操作数优先级可等于该优先级
+  FY
 }
 
 ///|
 /// 一个符号的运算符定义。
-priv struct OpDef {
+pub struct OpDef {
   infix : (Int, OpSpec)?
-  prefix : Int?
+  prefix : (Int, OpSpec)?
 }
 
 ///|
@@ -23,17 +27,18 @@ fn op_table() -> Map[String, OpDef] {
   let add_inf = fn(name : String, prec : Int, spec : OpSpec) {
     m[name] = { infix: Some((prec, spec)), prefix: None }
   }
-  let add_pre = fn(name : String, prec : Int) {
-    m[name] = { infix: None, prefix: Some(prec) }
+  let add_pre = fn(name : String, prec : Int, spec : OpSpec) {
+    m[name] = { infix: None, prefix: Some((prec, spec)) }
   }
   let add_both = fn(name : String, prec : Int, spec : OpSpec, pprec : Int) {
-    m[name] = { infix: Some((prec, spec)), prefix: Some(pprec) }
+    m[name] = { infix: Some((prec, spec)), prefix: Some((pprec, OpSpec::FY)) }
   }
   add_both(":-", 1200, OpSpec::XFX, 1200)
+  add_inf("-->", 1200, OpSpec::XFX)
   add_inf(";", 1100, OpSpec::XFY)
   add_inf("->", 1050, OpSpec::XFY)
   add_inf(",", 1000, OpSpec::XFY)
-  add_pre("\\+", 900)
+  add_pre("\\+", 900, OpSpec::FY)
   for
     n in [
       "=", "\\=", "==", "\\==", "@<", "@=<", "@>", "@>=", "is", "=:=", "=\\=", "<",
@@ -47,7 +52,7 @@ fn op_table() -> Map[String, OpDef] {
     add_inf(n, 400, OpSpec::YFX)
   }
   add_inf("^", 200, OpSpec::XFY)
-  add_pre("\\", 200)
+  add_pre("\\", 200, OpSpec::FY)
   m
 }
 
@@ -66,10 +71,20 @@ priv struct Parser {
   var_names : Map[Int, String]
   /// 子句/查询作用域内：变量名 -> id（同名变量共享 id）
   mut name_map : Map[String, Int]
+  /// 运算符表（op/3 可动态修改；默认内置表）
+  ops : Map[String, OpDef]
 }
 
 ///|
 fn Parser::new(src : String) -> Parser raise LoveError {
+  Parser::new_with_ops(src, op_table())
+}
+
+///|
+fn Parser::new_with_ops(
+  src : String,
+  ops : Map[String, OpDef],
+) -> Parser raise LoveError {
   let lexer = Lexer::{ src, pos: 0 }
   let toks : Array[(Tok, Int)] = []
   for ;; {
@@ -79,7 +94,7 @@ fn Parser::new(src : String) -> Parser raise LoveError {
       break
     }
   }
-  { toks, i: 0, var_counter: 0, var_names: Map([]), name_map: Map([]) }
+  { toks, i: 0, var_counter: 0, var_names: Map([]), name_map: Map([]), ops }
 }
 
 ///|
@@ -138,6 +153,7 @@ fn Parser::parse_operand(
           OpSpec::XFX => prec - 1
           OpSpec::YFX => prec - 1
           OpSpec::XFY => prec
+          OpSpec::FX | OpSpec::FY => prec - 1
         }
         let rhs = parser.parse_operand(rhs_max)
         lhs = LoveTerm::Struct(name, [lhs, rhs])
@@ -157,7 +173,7 @@ fn Parser::peek_infix_op(parser : Parser) -> (String, Int, OpSpec)? {
   match name {
     None => None
     Some(n) =>
-      match op_table().get(n) {
+      match parser.ops.get(n) {
         None => None
         Some(od) =>
           match od.infix {
@@ -179,18 +195,23 @@ fn Parser::parse_prefix_or_primary(parser : Parser) -> LoveTerm raise LoveError 
   match name {
     None => parser.parse_primary()
     Some(n) => {
-      let pprec = match op_table().get(n) {
+      let pprec = match parser.ops.get(n) {
         Some(od) => od.prefix
         None => None
       }
       match pprec {
         None => parser.parse_primary()
-        Some(prec) =>
+        Some((prec, spec)) =>
           if parser.peek_after() is Tok::Sym("(") {
             parser.parse_functor(n)
           } else {
             parser.bump()
-            let operand = parser.parse_operand(prec)
+            // fx：操作数优先级严格低于 prec；fy：可等于 prec
+            let operand_max = match spec {
+              OpSpec::FX => prec - 1
+              _ => prec
+            }
+            let operand = parser.parse_operand(operand_max)
             LoveTerm::Struct(n, [operand])
           }
       }
@@ -254,6 +275,16 @@ fn Parser::parse_primary(parser : Parser) -> LoveTerm raise LoveError {
         raise LoveError::ParseError(pos~, "expected ')'")
       }
       t
+    }
+    Tok::Sym("{") => {
+      // DCG 中的 {Goal}：解析为 Struct("{}", [Goal])
+      parser.bump()
+      let t = parser.parse_operand(1200)
+      if !parser.expect_sym("}") {
+        let (_, p2) = parser.peek()
+        raise LoveError::ParseError(pos=p2, "expected '}'")
+      }
+      LoveTerm::Struct("{}", [t])
     }
     Tok::Sym("[") => parser.parse_list()
     Tok::Sym("!") => {
@@ -360,6 +391,14 @@ fn Parser::parse_program_into(
 }
 
 ///|
+/// 分配一个 DCG 翻译用的全新变量 id（不进入 name_map）。
+fn Parser::dcg_fresh(parser : Parser) -> Int {
+  let id = parser.var_counter
+  parser.var_counter += 1
+  id
+}
+
+///|
 /// 解析一个顶层项（子句或指令），要求以 '.' 结束。
 fn Parser::parse_top_level(parser : Parser) -> TopLevel raise LoveError {
   parser.name_map = Map([])
@@ -372,6 +411,8 @@ fn Parser::parse_top_level(parser : Parser) -> TopLevel raise LoveError {
   match term {
     LoveTerm::Struct(":-", [h, b]) => TopLevel::Rule({ head: h, body: b })
     LoveTerm::Struct(":-", [b]) => TopLevel::Directive(b)
+    LoveTerm::Struct("-->", [h, b]) =>
+      TopLevel::Rule(dcg_translate(parser, h, b))
     other => TopLevel::Rule({ head: other, body: LoveTerm::Atom("true") })
   }
 }
@@ -393,11 +434,30 @@ pub fn parse_query(src : String) -> LoveTerm raise LoveError {
 }
 
 ///|
+/// 解析查询目标（使用自定义运算符表 op/3 修改后）。
+pub fn parse_query_with_ops(
+  src : String,
+  ops : Map[String, OpDef],
+) -> LoveTerm raise LoveError {
+  let (t, _) = parse_query_with_names_ops(src, ops)
+  t
+}
+
+///|
 /// 解析查询目标并返回查询中具名变量的 (id -> 名字) 表。
 pub fn parse_query_with_names(
   src : String,
 ) -> (LoveTerm, Map[Int, String]) raise LoveError {
-  let parser = Parser::new(src)
+  parse_query_with_names_ops(src, op_table())
+}
+
+///|
+/// 解析查询目标并返回具名变量表（使用自定义运算符表）。
+pub fn parse_query_with_names_ops(
+  src : String,
+  ops : Map[String, OpDef],
+) -> (LoveTerm, Map[Int, String]) raise LoveError {
+  let parser = Parser::new_with_ops(src, ops)
   if parser.peek() is (Tok::Sym("?-"), _) {
     parser.bump()
   }

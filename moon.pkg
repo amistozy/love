@@ -1,4 +1,13 @@
 import {
   "moonbitlang/core/math",
   "moonbitlang/core/string",
+  "moonbitlang/core/encoding/utf8",
 }
+
+options(
+  "native-stub": [ "stub.c" ],
+  targets: {
+    "read_io_native.mbt": [ "native" ],
+    "read_io_fallback.mbt": [ "wasm", "wasm-gc", "js" ],
+  },
+)

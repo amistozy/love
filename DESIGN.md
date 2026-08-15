@@ -35,6 +35,7 @@ happy(X) :- likes(X, bob).
 
 - 一个程序（program）由若干 `子句` 组成。
 - 子句有三种：**事实** `Head.`、**规则** `Head :- Body.`、**指令** `:- Goal.`（在加载时执行一次，v0.1 支持）。
+- **DCG 规则** `Head --> Body.`（v0.2 支持）：翻译为普通子句并附加差表参数，见 §2.5。
 - 查询形式为 `?- Goal.`，也可直接给出目标项（REPL 中省略 `?-`）。
 
 ### 1.2 项（Term）
@@ -49,14 +50,15 @@ happy(X) :- likes(X, bob).
 | 复合项 | `likes(alice, bob)`、`f(g(X))` | 函子 + 参数列表 |
 | 列表 | `[]`、`[a, b, c]`、`[H | T]`、`[a, b | T]` | 空表 / 表头表尾 |
 | 剪切 | `!` | 控制流内置 |
+| 花括号 | `{Goal}` | DCG 中嵌入普通目标（v0.2） |
 
-### 1.3 运算符（内置优先级表）
+### 1.3 运算符（内置优先级表 + 动态 op/3）
 
 Love 内置一张与 ISO/SWI 兼容的运算符表，解析时按优先级与结合性组项：
 
 | 优先级 | 运算符 | 结合性 |
 | --- | --- | --- |
-| 1200 | `:-` | xfx |
+| 1200 | `:-` `-->` | xfx |
 | 1100 | `;` | xfy |
 | 1050 | `->` | xfy |
 | 1000 | `,` | xfy |
@@ -68,7 +70,9 @@ Love 内置一张与 ISO/SWI 兼容的运算符表，解析时按优先级与结
 | 200 | `-` `+` `\` | fy（前缀） |
 
 - `x` 表示该侧不能出现同优先级运算符（用于实现左/右结合规则）。
-- 用户在 REPL 中不能自定义运算符（v0.1 限制，语法上仅支持内置表）。
+- **自定义运算符**（v0.2）：`op(Prec, Type, Name)` 动态增删运算符，`Type` 为
+  `xfx`/`xfy`/`yfx`/`fx`/`fy`，`Prec` 为 0..1200（0 删除），`Name` 为原子或原子列表。
+  修改作用于**程序实例**的运算符表，对之后解析的查询（REPL 下一行起）生效。
 
 ### 1.4 注释
 
@@ -106,12 +110,38 @@ Love 采用标准 Prolog 的 **SLD 解析**：
 - 求解器是**惰性迭代器**：每次 `next()` 只推进到下一个解，因此 REPL 可以逐个
   显示解，也便于 `findall/3` 收集全部解。
 
+### 2.5 异常：catch/throw（v0.2）
+
+- `throw(Ball)` 抛出一个异常项 Ball；`catch(Goal, Catcher, Recovery)` 在执行
+  Goal 期间捕获异常：若 Ball 与 Catcher 合一则运行 Recovery，否则继续向外传播。
+- 实现：`catch/3` 在目标栈上压入一个内部标记帧（记录进入时的 trail 长度、choice
+  point 数与 cut 屏障），再压入 Goal。Goal 正常完成时标记帧弹出，作用域结束；
+  抛出时从目标栈顶向下寻找最近的标记帧，恢复其入口状态，尝试合一 Ball 与
+  Catcher：成功则压入 Recovery 继续求解，失败则继续向外寻找。
+- **未捕获异常**使整个查询失败（v0.2 简化，不做错误打印）；`findall/bagof`
+  子引擎中的未捕获异常会传播到外层。
+- 与 ISO 的差异：无 `error/2` 体系，异常球可以是任意项，catch 对 cut 透明。
+
+### 2.6 DCG（定子句文法，v0.2）
+
+`Head --> Body.` 在解析期翻译为普通子句 `Head' :- Body'.`，其中：
+
+- 头部 `p(A1..An)` 追加两个变量 → `p(A1..An, S0, S)`（差表输入/输出）；
+- 体翻译 threading：
+  - `[t1, ..., tn]` → `S0 = [t1, ..., tn | S]`；`[]` → `S0 = S`
+  - `{G}` → `(G, S0 = S)`（嵌入普通目标，不消耗输入）
+  - `!` → `!`；`(A, B)` → 用中间变量串接；`(A ; B)` → 两者共享 (S0, S)
+  - `(A -> B)` → 条件用 (S0, S1)、then 用 (S1, S)；`(A -> B ; C)` 类似
+  - `\+ G` → `(\+ G', S0 = S)`（G' 用 (S0, S1)，S1 全新）
+  - 非终结符 `p(...)` → `p(..., S0, S)`；变量 → `call(G, S0, S)`
+- `phrase/2,3`：`phrase(NT, L)` 即 `phrase(NT, L, [])`，调用 NT 追加 (L, R)。
+
 ## 3. 内置谓词
 
 ### 3.1 控制流
 
 `true/0`、`fail/0`、`!/0`、`call/1`、`,/2`、`;/2`、`->/2,3`、`\+/1`、`once/1`、
-`repeat/0`。
+`repeat/0`、`catch/3`、`throw/1`（v0.2）。
 
 ### 3.2 项与合一
 
@@ -144,26 +174,38 @@ Love 采用标准 Prolog 的 **SLD 解析**：
 
 ### 3.6 高阶与收集
 
-- `call/1`、`maplist/2`、`findall/3`、`bagof/3`（v0.1 提供 `findall/3`，
-  `bagof`/`setof` 留待后续）。
+- `call/1`、`maplist/2`、`findall/3`、`bagof/3`、`setof/3`（v0.2）。
+- `bagof(T, G, B)` 按 Goal 中**自由变量**（出现在 G 但不在 T 中、且未被
+  `X^Goal` 存在量化）的取值分组：每组自由变量绑定一组取值，B 为该组模板实例
+  列表；回溯枚举各组。`setof` 额外对每组排序去重并按自由变量值排序分组。
+- `^`（存在量化）只剥离目标顶层的 `X^Goal` 链。
 
 ### 3.7 I/O
 
 - `write/1`、`writeln/1`、`nl/0`；
-- 通过 `@stdio`（native 目标）输出；后续可加 `read/1`。
+- `read/1`（v0.2）：从 stdin 读取一行，解析为一个项并与参数合一。native 目标
+  通过 FFI（`stub.c`）读取；wasm/js 目标返回失败（库保持目标无关）。
+
+### 3.8 动态运算符（v0.2）
+
+- `op(Prec, Type, Name)`：动态增删运算符，作用于程序实例的运算符表，影响之后
+  解析的查询。`current_op/3` 未实现。
 
 ## 4. 运行时架构（MoonBit 实现）
 
 ```
 love.mbt       公开 API 门面（parse_program / solve / REPL 服务）
-syntax.mbt     LoveTerm、Clause、Program 等 AST 类型
+syntax.mbt     LoveTerm、Clause、Program 等 AST 类型（含内置库子句、运算符表）
 lexer.mbt      词法分析（token 流）
-parser.mbt     Pratt 递归下降解析器（运算符优先级表）
+parser.mbt     Pratt 递归下降解析器（运算符优先级表、op/3 动态表）
+dcg.mbt        DCG 规则 → 普通子句的差表翻译
 unify.mbt      合一 + trail + occurs check
-engine.mbt     SLD 引擎（目标栈 + choice point 栈 + cut barrier）
+engine.mbt     SLD 引擎（目标栈 + choice point 栈 + cut barrier + catch 标记）
 builtins.mbt   内置谓词分发
 arith.mbt      算术表达式求值
 pretty.mbt     项打印（运算符、列表、引号规则）
+read_io_*.mbt  read/1 的 stdin 读取（native FFI / 其它目标占位）
+stub.c         read/1 的 C 实现
 cmd/main        CLI：加载文件 + 查询 + REPL
 ```
 
@@ -225,17 +267,17 @@ B 寄存器比较：`B0 == B` 时为最终解）。
 `Backspace` 删除，`Ctrl-L` 清屏，`Ctrl-D` 退出，`Ctrl-C` 取消当前行；
 管道/重定向时自动退回按行读取。
 
-## 6. 与 ISO Prolog 的已知差异（v0.1）
+## 6. 与 ISO Prolog 的已知差异（v0.2）
 
 1. 字符串 `"..."` 是字符串项，不是字符码列表；
 2. 算术错误使目标失败而非抛出异常；
-3. 无 `catch/3`、`throw/1`；
-4. 无 DCG（`-->`）、模块系统、自定义运算符；
+3. 未捕获的 `throw` 使整个查询失败（无错误打印与 `error/2`）；
+4. 无模块系统、自定义谓词优先级之外的 `current_op/3`、postfix 运算符；
 5. 无 occurs check（默认），仅提供显式内置；
-6. `bagof/3`、`setof/3` 未实现（`findall/3` 已实现）。
+6. `read/1` 只读取单行（不支持跨行项），wasm/js 目标上失败。
 
 ## 7. 路线图
 
 - [x] v0.1：解析器、合一、SLD 引擎、cut、内置谓词、算术、动态库、REPL
-- [ ] v0.2：`catch/throw`、`bagof/setof`、DCG、`read/1`、自定义运算符
+- [x] v0.2：`catch/throw`、`bagof/setof`、DCG、`read/1`、自定义运算符
 - [ ] v0.3：表驱动（tabling）、约束（CLP）、模块系统

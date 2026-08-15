@@ -43,7 +43,7 @@ fn op_priority(name : String, arity : Int) -> Int {
         }
       } else if arity == 1 {
         match od.prefix {
-          Some(p) => p
+          Some((p, _)) => p
           None => 0
         }
       } else {
@@ -58,6 +58,10 @@ fn format_struct(
   args : Array[LoveTerm],
   names : Map[Int, String],
 ) -> String {
+  // DCG 的 {Goal}：打印为 {Goal}
+  if name == "{}" && args.length() == 1 {
+    return "{" + fmt_operand(args[0], names, 1200) + "}"
+  }
   match args {
     [a, b] =>
       match op_table().get(name) {
@@ -68,6 +72,7 @@ fn format_struct(
                 OpSpec::XFX => (prec - 1, prec - 1)
                 OpSpec::YFX => (prec, prec - 1)
                 OpSpec::XFY => (prec - 1, prec)
+                OpSpec::FX | OpSpec::FY => (prec - 1, prec - 1)
               }
               let ls = fmt_operand(a, names, lctx)
               let rs = fmt_operand(b, names, rctx)
@@ -87,8 +92,16 @@ fn format_struct(
       match op_table().get(name) {
         Some(od) =>
           match od.prefix {
-            Some(prec) => {
-              let operand = fmt_operand(a, names, prec)
+            Some((prec, spec)) => {
+              // fx：操作数优先级严格低于 prec；fy：可等于 prec
+              let operand = fmt_operand(
+                a,
+                names,
+                match spec {
+                  OpSpec::FX => prec - 1
+                  _ => prec
+                },
+              )
               if name == "-" || name == "+" {
                 "\{name}\{operand}"
               } else {

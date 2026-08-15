@@ -17,6 +17,17 @@ priv enum CPKind {
   ClauseScan(Int, LoveTerm, LoveTerm, Array[Clause])
   /// between/3：枚举整数
   EnumInt(Int64, Int64, LoveTerm)
+  /// bagof/setof：枚举分组（i 为下一组下标）
+  EnumBag(Int, Array[BagGroup], Array[Int], LoveTerm, Int)
+}
+
+///|
+/// bagof/setof 的一个分组：自由变量取值 + 该组的模板实例列表。
+priv struct BagGroup {
+  /// 自由变量的取值（复制到外层变量空间的快照）
+  values : Array[LoveTerm]
+  /// 该组收集到的模板实例
+  mut tlist : Array[LoveTerm]
 }
 
 ///|
@@ -81,6 +92,8 @@ priv struct Engine {
   mut var_counter : Int
   mut found : Bool
   query : LoveTerm
+  /// 未捕获异常（throw 未找到匹配的 catch）
+  mut uncaught : LoveTerm?
 }
 
 ///|
@@ -97,6 +110,7 @@ fn Engine::new(
     var_counter: start_counter,
     found: false,
     query,
+    uncaught: None,
   }
 }
 
@@ -111,6 +125,9 @@ fn Engine::fresh_var(engine : Engine) -> Int {
 ///|
 /// 惰性求解：每次调用推进到下一个解，返回解引用后的查询项。
 fn Engine::solve_next(engine : Engine) -> LoveTerm? {
+  if engine.uncaught is Some(_) {
+    return None
+  }
   if engine.found {
     if !engine.backtrack() {
       return None
@@ -126,6 +143,10 @@ fn Engine::solve_next(engine : Engine) -> LoveTerm? {
       None => return None
     }
     if !engine.process(f) {
+      // 未捕获异常：整个查询失败，不再回溯
+      if engine.uncaught is Some(_) {
+        return None
+      }
       if !engine.backtrack() {
         return None
       }
@@ -147,8 +168,53 @@ fn Engine::process(engine : Engine, f : Frame) -> Bool {
     LoveTerm::Var(_) => false
     LoveTerm::Int(_) | LoveTerm::Float(_) | LoveTerm::Str(_) => false
     LoveTerm::ListCons(_, _) | LoveTerm::ListNil => false
+    // catch 标记帧：Goal 正常完成后弹出，结束 catch 作用域
+    LoveTerm::Struct("$love_catch", _) => true
     LoveTerm::Struct(name, args) => engine.call_predicate(name, args, f)
   }
+}
+
+///|
+/// throw(Ball)：从目标栈顶部向下寻找最近的 catch 标记。
+/// 找到后恢复到该 catch 入口状态，尝试合一 Ball 与 Catcher：
+/// 成功则压入 Recovery 继续求解，失败则继续向外寻找。
+/// 返回 true 表示异常已被捕获处理。
+fn Engine::do_throw(engine : Engine, ball : LoveTerm) -> Bool {
+  let mut i = engine.goals.length() - 1
+  while i >= 0 {
+    match engine.goals[i].term {
+      LoveTerm::Struct(
+        "$love_catch",
+        [
+          catcher,
+          recovery,
+          LoveTerm::Int(tl),
+          LoveTerm::Int(cl),
+          LoveTerm::Int(barrier),
+        ]
+      ) => {
+        let tl_i = tl.to_int()
+        let cl_i = cl.to_int()
+        let barrier_i = barrier.to_int()
+        // 恢复到 catch 入口状态：撤销其后的绑定、choice point 与目标帧
+        engine.subst.unbind_to(tl_i)
+        engine.cps.truncate(cl_i)
+        engine.goals.truncate(i)
+        let before = engine.subst.trail.length()
+        if unify(engine.subst, ball, catcher) {
+          engine.push_body(recovery, barrier_i)
+          return true
+        } else {
+          // 未捕获：撤销合一尝试的部分绑定，继续向外
+          engine.subst.unbind_to(before)
+          i -= 1
+        }
+      }
+      _ => i -= 1
+    }
+  }
+  engine.uncaught = Some(ball)
+  false
 }
 
 ///|
@@ -262,8 +328,36 @@ fn Engine::backtrack(engine : Engine) -> Bool {
             return true
           }
         }
+      CPKind::EnumBag(i, groups, free_ids, bag, barrier) =>
+        if i < groups.length() {
+          let before = engine.subst.trail.length()
+          if apply_bag_group(engine, groups[i], free_ids, bag) {
+            engine.cps.push({
+              trail_len: before,
+              goals_snapshot: snapshot_goals(engine.goals),
+              kind: CPKind::EnumBag(i + 1, groups, free_ids, bag, barrier),
+            })
+            return true
+          }
+        }
     }
   }
+}
+
+///|
+/// 应用一组 bagof 分组：绑定自由变量取值，并与模板实例列表合一。
+fn apply_bag_group(
+  engine : Engine,
+  group : BagGroup,
+  free_ids : Array[Int],
+  bag : LoveTerm,
+) -> Bool {
+  for k in 0..<free_ids.length() {
+    if !unify(engine.subst, LoveTerm::Var(free_ids[k]), group.values[k]) {
+      return false
+    }
+  }
+  unify(engine.subst, bag, list_of(group.tlist))
 }
 
 ///|
@@ -283,6 +377,7 @@ fn Engine::has_pending(engine : Engine) -> Bool {
       CPKind::PushTerm(_, _) => true
       CPKind::ClauseScan(ci, _, _, all) => ci < all.length()
       CPKind::EnumInt(lo, hi, _) => lo <= hi
+      CPKind::EnumBag(i, groups, _, _, _) => i < groups.length()
     }
     if pending {
       return true

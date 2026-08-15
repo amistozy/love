@@ -50,10 +50,12 @@ pub struct PredClauses {
 }
 
 ///|
-/// Love 程序：谓词表与指令（:- Goal.）。
+/// Love 程序：谓词表、指令与运算符表。
 pub struct Program {
   preds : Map[String, PredClauses]
   directives : Array[LoveTerm]
+  /// 运算符表（op/3 可动态修改；默认内置表）
+  ops : Map[String, OpDef]
 }
 
 ///|
@@ -67,7 +69,25 @@ pub fn Program::new() -> Program {
 ///|
 /// 创建不注入库子句的空程序（解析器用：先加用户子句再注入库）。
 pub fn Program::empty() -> Program {
-  { preds: Map([]), directives: [] }
+  { preds: Map([]), directives: [], ops: op_table() }
+}
+
+///|
+/// 使用程序当前的运算符表解析查询。
+pub fn Program::parse_query(
+  program : Program,
+  src : String,
+) -> LoveTerm raise LoveError {
+  parse_query_with_ops(src, program.ops)
+}
+
+///|
+/// 使用程序当前的运算符表解析查询并返回具名变量表。
+pub fn Program::parse_query_with_names(
+  program : Program,
+  src : String,
+) -> (LoveTerm, Map[Int, String]) raise LoveError {
+  parse_query_with_names_ops(src, program.ops)
 }
 
 ///|

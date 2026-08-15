@@ -366,6 +366,142 @@ test "findall collects solutions" {
   )
 }
 
+// ---------- catch/throw ----------
+
+///|
+test "catch: throw caught by matching catcher" {
+  assert_eq(qs_of("catch(throw(x), x, true).").length(), 1)
+  assert_eq(
+    qs_of("catch(throw(x), x, R = caught).")[0],
+    "catch(throw(x), x, caught = caught)",
+  )
+  // Recovery 运行并绑定变量
+  assert_eq(
+    qs_of("catch(throw(x), x, R = ok).")[0],
+    "catch(throw(x), x, ok = ok)",
+  )
+}
+
+///|
+test "catch: non-matching catcher propagates (uncaught fails)" {
+  // throw(y) 与 catcher x 不合一 → 未捕获 → 整个查询失败
+  assert_true(qs_of("catch(throw(x), y, true).").is_empty())
+  // 无 catch 直接 throw → 失败
+  assert_true(qs_of("throw(x).").is_empty())
+}
+
+///|
+test "catch: goal failure does not run recovery" {
+  assert_true(qs_of("catch(fail, _, true).").is_empty())
+  assert_true(qs_of("catch(fail, _, R = ok).").is_empty())
+}
+
+///|
+test "catch: nested catches and outer propagation" {
+  // 内层 catcher 匹配 → 内层恢复（R 是同一查询变量，保持 inner 绑定）
+  assert_eq(
+    qs_of("catch(catch(throw(x), x, R = inner), y, R = outer).")[0],
+    "catch(catch(throw(x), x, inner = inner), y, inner = outer)",
+  )
+  // 内层不匹配 → 外层捕获
+  assert_eq(
+    qs_of("catch(catch(throw(x), y, fail), x, R = outer).")[0],
+    "catch(catch(throw(x), y, fail), x, outer = outer)",
+  )
+}
+
+///|
+test "catch: throw inside goal after partial work" {
+  // 先绑定再抛：捕获时撤销 Goal 中的绑定，恢复运行 Recovery
+  assert_eq(
+    qs_of("catch((X = 1, throw(x)), x, R = X).")[0],
+    "catch((_0 = 1, throw(x)), x, _0 = _0)",
+  )
+}
+
+///|
+test "catch: works with backtracking in goal" {
+  // Goal 有多个解，第一个解成功 → catch 成功；回溯进入第二个解抛异常 → 被捕获
+  let sols = qs_of("catch((X = 1 ; throw(x)), x, R = caught).")
+  assert_eq(sols.length(), 2)
+}
+
+///|
+test "catch: goal backtracking into throw is caught" {
+  // X = 1 成功 → catch 成功；回溯进入 throw(x) 分支 → 被捕获 → Recovery 运行
+  let sols = qs_of("catch((X = 1 ; throw(x)), x, R = caught).")
+  assert_eq(sols.length(), 2)
+}
+
+///|
+test "catch: recovery suppresses remaining alternatives" {
+  // Goal 内 throw 之后的 choice point 应被截断：`; X = 1` 不再尝试
+  let sols = qs_of("catch((throw(x) ; X = 1), x, R = ok).")
+  assert_eq(sols.length(), 1)
+  assert_eq(sols[0], "catch((throw(x) ; _0 = 1), x, ok = ok)")
+}
+
+///|
+test "throw: ball can be any term" {
+  assert_eq(qs_of("catch(throw(f(a, b)), f(A, B), true).").length(), 1)
+  assert_eq(
+    qs_of("catch(throw(42), N, true).")[0],
+    "catch(throw(42), 42, true)",
+  )
+}
+
+// ---------- bagof/setof ----------
+
+///|
+test "bagof: collects template instances" {
+  assert_eq(
+    qs_of("bagof(X, member(X, [1, 2, 3]), L).")[0],
+    "bagof(_0, member(_0, [1, 2, 3]), [1, 2, 3])",
+  )
+  // 无解 → 失败（与 findall 返回 [] 不同）
+  assert_true(qs_of("bagof(X, fail, L).").is_empty())
+}
+
+///|
+test "bagof: groups by free variables" {
+  // 自由变量 Y：按 Y 的取值分组
+  let sols = qs_of("bagof(X, member(X-Y, [1-a, 2-b, 3-a]), L).")
+  assert_eq(sols.length(), 2)
+  assert_eq(sols[0], "bagof(_0, member(_0 - a, [1 - a, 2 - b, 3 - a]), [1, 3])")
+  assert_eq(sols[1], "bagof(_0, member(_0 - b, [1 - a, 2 - b, 3 - a]), [2])")
+}
+
+///|
+test "bagof: existential quantification with ^" {
+  // Y 是存在量化变量 → 不参与分组
+  assert_eq(
+    qs_of("bagof(X, Y^member(X-Y, [1-a, 2-b, 3-a]), L).")[0],
+    "bagof(_0, _1 ^ member(_0 - _1, [1 - a, 2 - b, 3 - a]), [1, 2, 3])",
+  )
+}
+
+///|
+test "bagof: binds free variables in query" {
+  // 分组时自由变量 Y 绑定到分组取值
+  let p = parse_program("")
+  let q = parse_query("bagof(X, member(X-Y, [1-a, 2-b, 3-a]), L), Y = b.")
+  let sols = solve_terms(p, q)
+  assert_eq(sols.length(), 1)
+}
+
+///|
+test "setof: sorts and deduplicates" {
+  assert_eq(
+    qs_of("setof(X, member(X, [3, 1, 3, 2, 1]), L).")[0],
+    "setof(_0, member(_0, [3, 1, 3, 2, 1]), [1, 2, 3])",
+  )
+  // 按标准序分组
+  let sols = qs_of("setof(X, member(X-Y, [1-b, 2-a, 3-a]), L).")
+  assert_eq(sols.length(), 2)
+  assert_eq(sols[0], "setof(_0, member(_0 - a, [1 - b, 2 - a, 3 - a]), [2, 3])")
+  assert_eq(sols[1], "setof(_0, member(_0 - b, [1 - b, 2 - a, 3 - a]), [1])")
+}
+
 // ---------- 动态数据库 ----------
 
 ///|
@@ -406,6 +542,144 @@ test "dynamic rules via assert" {
     Some(LoveTerm::Atom("c")) => ()
     _ => fail("G should be bound to c")
   }
+}
+
+// ---------- DCG ----------
+
+///|
+test "dcg: simple grammar with phrase" {
+  let src =
+    #|s --> [a], b.
+    #|b --> [b].
+    #|b --> [c].
+    #|
+  // phrase(s, [a, b]) / [a, c] 成功
+  assert_true(sols_of(src, "?- phrase(s, [a, b]).").length() == 1)
+  assert_true(sols_of(src, "?- phrase(s, [a, c]).").length() == 1)
+  // 不匹配
+  assert_true(sols_of(src, "?- phrase(s, [a]).").is_empty())
+  assert_true(sols_of(src, "?- phrase(s, [b, c]).").is_empty())
+  // 生成：枚举两个可接受的串
+  let sols = sols_of(src, "?- phrase(s, L).")
+  assert_eq(sols.length(), 2)
+}
+
+///|
+test "dcg: recursive grammar" {
+  let src =
+    #|digits --> [].
+    #|digits --> [D], {integer(D)}, digits.
+    #|
+  assert_true(sols_of(src, "?- phrase(digits, []).").length() == 1)
+  assert_true(sols_of(src, "?- phrase(digits, [1, 2, 3]).").length() == 1)
+  assert_true(sols_of(src, "?- phrase(digits, [1, a]).").is_empty())
+  assert_true(sols_of(src, "?- phrase(digits, [a]).").is_empty())
+}
+
+///|
+test "dcg: curly braces embed plain goals" {
+  let src =
+    #|s(X) --> [a], {X is 1 + 1}, [b].
+    #|
+  let sols = sols_of(src, "?- phrase(s(X), [a, b]).")
+  assert_eq(sols.length(), 1)
+  // X 应绑定为 2
+  let p = parse_program(src)
+  let q = parse_query("phrase(s(X), [a, b]).")
+  let all = solve_all(p, q)
+  let ids = query_var_ids(q)
+  match all[0].bindings.get(ids[0]) {
+    Some(LoveTerm::Int(v)) => assert_eq(v, 2L)
+    _ => fail("X should be 2")
+  }
+}
+
+///|
+test "dcg: disjunction and negation" {
+  let src =
+    #|s --> ([a] ; [b]).
+    #|no_a --> \+ [a], [b].
+    #|
+  assert_true(sols_of(src, "?- phrase(s, [a]).").length() == 1)
+  assert_true(sols_of(src, "?- phrase(s, [b]).").length() == 1)
+  assert_true(sols_of(src, "?- phrase(s, [c]).").is_empty())
+  // \+ [a] 不消耗输入：整体匹配「非 a 开头的串」+ 首字符 b
+  assert_true(sols_of(src, "?- phrase(no_a, [b]).").length() == 1)
+  assert_true(sols_of(src, "?- phrase(no_a, [a]).").is_empty())
+  assert_true(sols_of(src, "?- phrase(no_a, [x]).").is_empty())
+}
+
+///|
+test "dcg: if-then-else" {
+  let src =
+    #|s --> ([a] -> [b] ; [c]).
+    #|
+  assert_true(sols_of(src, "?- phrase(s, [a, b]).").length() == 1)
+  assert_true(sols_of(src, "?- phrase(s, [c]).").length() == 1)
+  assert_true(sols_of(src, "?- phrase(s, [a, c]).").is_empty())
+}
+
+// ---------- op/3 自定义运算符 ----------
+
+///|
+test "op: defines a new infix operator for subsequent parses" {
+  let p = parse_program("")
+  // 第一段：定义运算符
+  let q1 = p.parse_query("op(500, yfx, foo).")
+  assert_eq(solve_terms(p, q1).length(), 1)
+  // 第二段：用新运算符解析并求解（同一程序实例，运算符表已更新）
+  let q2 = p.parse_query("X = a foo b.")
+  let sols = solve_all(p, q2)
+  assert_eq(sols.length(), 1)
+  let ids = query_var_ids(q2)
+  match sols[0].bindings.get(ids[0]) {
+    Some(LoveTerm::Struct("foo", [LoveTerm::Atom("a"), LoveTerm::Atom("b")])) =>
+      ()
+    _ => fail("X should be foo(a, b)")
+  }
+}
+
+///|
+test "op: precedence and associativity" {
+  let p = parse_program("")
+  assert_eq(solve_terms(p, p.parse_query("op(500, yfx, foo).")).length(), 1)
+  // yfx：左结合，a foo b foo c = foo(foo(a, b), c)
+  let q = p.parse_query("X = a foo b foo c.")
+  let sols = solve_all(p, q)
+  let ids = query_var_ids(q)
+  match sols[0].bindings.get(ids[0]) {
+    Some(LoveTerm::Struct("foo", [LoveTerm::Struct("foo", [_, _]), _])) => ()
+    _ => fail("yfx should be left-associative")
+  }
+}
+
+///|
+test "op: prefix operator" {
+  let p = parse_program("")
+  assert_eq(solve_terms(p, p.parse_query("op(200, fy, not_).")).length(), 1)
+  let q = p.parse_query("X = not_ a.")
+  let sols = solve_all(p, q)
+  let ids = query_var_ids(q)
+  match sols[0].bindings.get(ids[0]) {
+    Some(LoveTerm::Struct("not_", [LoveTerm::Atom("a")])) => ()
+    _ => fail("X should be not_(a)")
+  }
+}
+
+///|
+test "op: list of names and removal" {
+  let p = parse_program("")
+  // 列表形式一次定义多个
+  assert_eq(
+    solve_terms(p, p.parse_query("op(500, yfx, [foo, bar]).")).length(),
+    1,
+  )
+  assert_eq(solve_terms(p, p.parse_query("X = a bar b.")).length(), 1)
+  // prec 0 删除
+  assert_eq(solve_terms(p, p.parse_query("op(0, yfx, foo).")).length(), 1)
+  // 删除后 foo 不再是运算符 → 解析失败
+  let bad = Some(p.parse_query("X = a foo b.")) catch { _ => None }
+  assert_true(bad is None)
 }
 
 // ---------- 字符串与控制流 ----------

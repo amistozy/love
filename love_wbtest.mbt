@@ -140,3 +140,21 @@ test "recursion shares clause variables across invocations" {
     },
   )
 }
+
+///|
+test "read_term_from_line parses a term" {
+  // 完整项
+  match read_term_from_line("foo(1, bar).") {
+    Some(LoveTerm::Struct("foo", [LoveTerm::Int(1), LoveTerm::Atom("bar")])) =>
+      ()
+    _ => fail("expected foo(1, bar)")
+  }
+  // 无结尾句点也可
+  match read_term_from_line("hello") {
+    Some(LoveTerm::Atom("hello")) => ()
+    _ => fail("expected hello")
+  }
+  // 解析失败 → None（不完整的项）
+  assert_true(read_term_from_line("foo(1") is None)
+  assert_true(read_term_from_line("[a, b") is None)
+}

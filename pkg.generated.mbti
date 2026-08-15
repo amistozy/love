@@ -28,6 +28,10 @@ pub fn parse_query(String) -> LoveTerm raise LoveError
 
 pub fn parse_query_with_names(String) -> (LoveTerm, Map[Int, String]) raise LoveError
 
+pub fn parse_query_with_names_ops(String, Map[String, OpDef]) -> (LoveTerm, Map[Int, String]) raise LoveError
+
+pub fn parse_query_with_ops(String, Map[String, OpDef]) -> LoveTerm raise LoveError
+
 pub fn query_var_ids(LoveTerm) -> Array[Int]
 
 pub fn run_query(Program, String) -> Array[Solution] raise LoveError
@@ -62,6 +66,19 @@ pub enum LoveTerm {
   ListNil
 } derive(@debug.Debug)
 
+pub struct OpDef {
+  infix : (Int, OpSpec)?
+  prefix : (Int, OpSpec)?
+}
+
+pub enum OpSpec {
+  XFX
+  XFY
+  YFX
+  FX
+  FY
+}
+
 pub struct PredClauses {
   statics : Array[Clause]
   dynamics : Array[Clause]
@@ -70,9 +87,12 @@ pub struct PredClauses {
 pub struct Program {
   preds : Map[String, PredClauses]
   directives : Array[LoveTerm]
+  ops : Map[String, OpDef]
 }
 pub fn Program::empty() -> Self
 pub fn Program::new() -> Self
+pub fn Program::parse_query(Self, String) -> LoveTerm raise LoveError
+pub fn Program::parse_query_with_names(Self, String) -> (LoveTerm, Map[Int, String]) raise LoveError
 
 pub struct Solution {
   query : LoveTerm

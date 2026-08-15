@@ -64,6 +64,36 @@ fn Engine::try_builtin(
       engine.goals.push({ term: args[0], ci: 0, barrier: f.barrier })
       Some(true)
     }
+    // call/2,3：给目标追加参数后调用（DCG 的 call(G, S0, S) 等）
+    "call" if n >= 2 =>
+      match engine.subst.deref(args[0]) {
+        LoveTerm::Atom(nm) => {
+          let extra : Array[LoveTerm] = []
+          for i in 1..<args.length() {
+            extra.push(args[i])
+          }
+          engine.goals.push({
+            term: LoveTerm::Struct(nm, extra),
+            ci: 0,
+            barrier: f.barrier,
+          })
+          Some(true)
+        }
+        LoveTerm::Struct(nm, gargs) => {
+          let all = gargs.map(fn(x) { x })
+          for i in 1..<args.length() {
+            all.push(args[i])
+          }
+          engine.goals.push({
+            term: LoveTerm::Struct(nm, all),
+            ci: 0,
+            barrier: f.barrier,
+          })
+          Some(true)
+        }
+        _ => Some(false)
+      }
+    "phrase" if n == 2 || n == 3 => Some(builtin_phrase(engine, args, f))
     "once" if n == 1 => {
       let b = engine.cps.length()
       engine.goals.push({ term: LoveTerm::Atom("true"), ci: 0, barrier: b })
@@ -79,6 +109,9 @@ fn Engine::try_builtin(
       })
       Some(true)
     }
+    // ---------- 异常：catch/throw ----------
+    "catch" if n == 3 => Some(builtin_catch(engine, args, f))
+    "throw" if n == 1 => Some(builtin_throw(engine, args))
     // ---------- 合一与项检查 ----------
     "=" if n == 2 => Some(unify(engine.subst, args[0], args[1]))
     "\\=" if n == 2 => {
@@ -270,9 +303,170 @@ fn Engine::try_builtin(
       println("")
       Some(true)
     }
+    "read" if n == 1 => Some(builtin_read(engine, args))
+    // ---------- 动态运算符 ----------
+    "op" if n == 3 => Some(builtin_op(engine, args))
     // ---------- 收集 ----------
     "findall" if n == 3 => Some(builtin_findall(engine, args))
+    "bagof" if n == 3 => Some(builtin_bagof(engine, args, f, false))
+    "setof" if n == 3 => Some(builtin_bagof(engine, args, f, true))
     _ => None
+  }
+}
+
+///|
+/// catch(Goal, Catcher, Recovery)：在目标栈上压入一个 catch 标记帧，
+/// 再压入 Goal。Goal 正常完成后标记帧弹出（结束 catch 作用域）；
+/// Goal 抛出异常时由 Engine::do_throw 处理。
+fn builtin_catch(engine : Engine, args : Array[LoveTerm], f : Frame) -> Bool {
+  let tl = engine.subst.trail.length()
+  let cl = engine.cps.length()
+  let marker = LoveTerm::Struct("$love_catch", [
+    args[1],
+    args[2],
+    LoveTerm::Int(tl.to_int64()),
+    LoveTerm::Int(cl.to_int64()),
+    LoveTerm::Int(f.barrier.to_int64()),
+  ])
+  // 先压标记，再压 Goal：Goal 先被处理，完成后标记弹出
+  engine.goals.push({ term: marker, ci: 0, barrier: f.barrier })
+  engine.push_body(args[0], f.barrier)
+  true
+}
+
+///|
+/// throw(Ball)：抛出异常，交由 Engine::do_throw 向上寻找 catch。
+fn builtin_throw(engine : Engine, args : Array[LoveTerm]) -> Bool {
+  let ball = engine.subst.deref(args[0])
+  engine.do_throw(ball)
+}
+
+///|
+/// read(Term)：从 stdin 读取一行，解析为项并与 Term 合一。
+/// 非 native 目标或不完整输入导致失败。
+fn builtin_read(engine : Engine, args : Array[LoveTerm]) -> Bool {
+  match read_line_stdin() {
+    None => false
+    Some(line) =>
+      match read_term_from_line(line) {
+        None => false
+        Some(t) => unify(engine.subst, args[0], t)
+      }
+  }
+}
+
+///|
+/// 把一行输入解析为一个项（read/1 的核心逻辑，可独立测试）。
+/// 解析失败返回 None。
+fn read_term_from_line(line : String) -> LoveTerm? {
+  let src = line.trim().to_owned()
+  Some(parse_query(src)) catch {
+    _ => None
+  }
+}
+
+///|
+/// op(Prec, Type, Name)：动态定义/修改/删除运算符。
+/// 生效于此后解析的查询（REPL 中下一行起）。
+fn builtin_op(engine : Engine, args : Array[LoveTerm]) -> Bool {
+  let prec = engine.subst.deref(args[0])
+  let typ = engine.subst.deref(args[1])
+  let name = engine.subst.deref(args[2])
+  match (prec, typ) {
+    (LoveTerm::Int(p), LoveTerm::Atom(t)) =>
+      if p < 0L || p > 1200L || !is_op_type(t) {
+        false
+      } else {
+        // 名字可以是原子或原子列表
+        let names : Array[String] = []
+        match name {
+          LoveTerm::Atom(nm) => names.push(nm)
+          _ =>
+            match flatten_proper_list(name) {
+              None => return false
+              Some(elems) =>
+                for e in elems {
+                  match engine.subst.deref(e) {
+                    LoveTerm::Atom(nm) => names.push(nm)
+                    _ => return false
+                  }
+                }
+            }
+        }
+        let prio = p.to_int()
+        for nm in names {
+          set_program_op(engine.program.ops, prio, t, nm)
+        }
+        true
+      }
+    _ => false
+  }
+}
+
+///|
+/// 运算符类型是否合法（支持 xfx/xfy/yfx/fx/fy）。
+fn is_op_type(t : String) -> Bool {
+  t == "xfx" || t == "xfy" || t == "yfx" || t == "fx" || t == "fy"
+}
+
+///|
+/// 把 op/3 的结果写入运算符表；prec == 0 删除。
+fn set_program_op(
+  ops : Map[String, OpDef],
+  prec : Int,
+  typ : String,
+  name : String,
+) -> Unit {
+  if prec == 0 {
+    ops.remove(name)
+    return
+  }
+  let old = ops.get(name)
+  let (infix, prefix) = match old {
+    None => (None, None)
+    Some(od) => (od.infix, od.prefix)
+  }
+  let new_def = match typ {
+    "xfx" => { infix: Some((prec, OpSpec::XFX)), prefix }
+    "xfy" => { infix: Some((prec, OpSpec::XFY)), prefix }
+    "yfx" => { infix: Some((prec, OpSpec::YFX)), prefix }
+    "fx" => { infix, prefix: Some((prec, OpSpec::FX)) }
+    "fy" => { infix, prefix: Some((prec, OpSpec::FY)) }
+    _ => return
+  }
+  ops[name] = new_def
+}
+
+///|
+/// phrase(NT, L) → call NT with (L, [])；phrase(NT, L, R) → call NT with (L, R)。
+fn builtin_phrase(engine : Engine, args : Array[LoveTerm], f : Frame) -> Bool {
+  let nt = engine.subst.deref(args[0])
+  let rest : Array[LoveTerm] = if args.length() == 2 {
+    [args[1], LoveTerm::ListNil]
+  } else {
+    [args[1], args[2]]
+  }
+  match nt {
+    LoveTerm::Atom(nm) => {
+      engine.goals.push({
+        term: LoveTerm::Struct(nm, rest),
+        ci: 0,
+        barrier: f.barrier,
+      })
+      true
+    }
+    LoveTerm::Struct(nm, gargs) => {
+      let all = gargs.map(fn(x) { x })
+      all.push(rest[0])
+      all.push(rest[1])
+      engine.goals.push({
+        term: LoveTerm::Struct(nm, all),
+        ci: 0,
+        barrier: f.barrier,
+      })
+      true
+    }
+    _ => false
   }
 }
 
@@ -637,15 +831,135 @@ fn builtin_findall(engine : Engine, args : Array[LoveTerm]) -> Bool {
   } else {
     sub.var_counter
   }
+  // 子引擎未捕获异常 → 传播到外层
+  if sub.uncaught is Some(b) {
+    engine.uncaught = Some(b)
+    return false
+  }
   unify(engine.subst, args[2], list_of(results))
 }
 
 ///|
-/// 把若干项复制到全新变量空间（findall 用）。
-fn copy_fresh(
+/// bagof/setof：按自由变量的取值分组收集模板实例。
+/// 自由变量 = Goal 中变量 - Template 中变量 - 存在量化（X^Goal）变量。
+/// bagof 按首次出现顺序枚举分组；setof 额外对每组排序去重并按自由变量值排序分组。
+fn builtin_bagof(
+  engine : Engine,
+  args : Array[LoveTerm],
+  f : Frame,
+  setof : Bool,
+) -> Bool {
+  let tpl = engine.subst.deref(args[0])
+  let goal0 = engine.subst.deref(args[1])
+  let (goal, existential) = strip_existential(goal0)
+  let goal_ids : Array[Int] = []
+  collect_var_ids(goal, goal_ids)
+  let tpl_ids : Array[Int] = []
+  collect_var_ids(tpl, tpl_ids)
+  let free_ids : Array[Int] = []
+  for id in goal_ids {
+    if !tpl_ids.contains(id) && !existential.contains(id) {
+      free_ids.push(id)
+    }
+  }
+  // 复制到全新变量空间，并记录 原id -> 新id 映射（子引擎中读取自由变量值用）
+  let (copies, map, new_counter) = copy_fresh_map(engine, [tpl, goal])
+  let tpl_copy = copies[0]
+  let goal_copy = copies[1]
+  let sub = Engine::new(engine.program, new_counter, goal_copy)
+  let groups : Array[BagGroup] = []
+  for ;; {
+    match sub.solve_next() {
+      None => break
+      Some(_) => {
+        let inst = sub.subst.deref(tpl_copy)
+        let (inst_copies, _) = copy_fresh(engine, [inst])
+        let values : Array[LoveTerm] = []
+        for fid in free_ids {
+          match map.get(fid) {
+            None => ()
+            Some(sub_id) => {
+              let v = sub.subst.deref(LoveTerm::Var(sub_id))
+              let (v_copies, _) = copy_fresh(engine, [v])
+              values.push(v_copies[0])
+            }
+          }
+        }
+        // 查找已有分组（按自由变量取值快照相等）
+        let mut found = -1
+        for gi in 0..<groups.length() {
+          if bag_values_equal(engine, groups[gi].values, values) {
+            found = gi
+            break
+          }
+        }
+        if found >= 0 {
+          groups[found].tlist.push(inst_copies[0])
+        } else {
+          groups.push({ values, tlist: [inst_copies[0]] })
+        }
+      }
+    }
+  }
+  engine.var_counter = if engine.var_counter > sub.var_counter {
+    engine.var_counter
+  } else {
+    sub.var_counter
+  }
+  // 子引擎未捕获异常 → 传播到外层
+  if sub.uncaught is Some(b) {
+    engine.uncaught = Some(b)
+    return false
+  }
+  if groups.is_empty() {
+    return false
+  }
+  // setof：每组排序去重，并按自由变量值排序分组
+  if setof {
+    for g in groups {
+      g.tlist = dedup_sorted(merge_sort(g.tlist, engine.subst), engine.subst)
+    }
+    sort_bag_groups(engine.subst, groups)
+  }
+  // 应用第一组，并压入枚举 choice point（剩余分组）
+  let bag = args[2]
+  let base = engine.subst.trail.length()
+  if !apply_bag_group(engine, groups[0], free_ids, bag) {
+    return false
+  }
+  if groups.length() > 1 {
+    engine.cps.push({
+      trail_len: base,
+      goals_snapshot: snapshot_goals(engine.goals),
+      kind: CPKind::EnumBag(1, groups, free_ids, bag, f.barrier),
+    })
+  }
+  true
+}
+
+///|
+/// 剥离目标顶层的存在量化链 X^Y^Goal，返回清理后的目标与存在量化变量 id。
+fn strip_existential(t : LoveTerm) -> (LoveTerm, Array[Int]) {
+  let ids : Array[Int] = []
+  let mut cur = t
+  for ;; {
+    match cur {
+      LoveTerm::Struct("^", [LoveTerm::Var(id), rest]) => {
+        ids.push(id)
+        cur = rest
+      }
+      _ => break
+    }
+  }
+  (cur, ids)
+}
+
+///|
+/// 复制项到全新变量空间并返回 原id -> 新id 映射。
+fn copy_fresh_map(
   engine : Engine,
   terms : Array[LoveTerm],
-) -> (Array[LoveTerm], Int) {
+) -> (Array[LoveTerm], Map[Int, Int], Int) {
   let ids : Array[Int] = []
   for t in terms {
     collect_var_ids(t, ids)
@@ -656,7 +970,61 @@ fn copy_fresh(
   }
   engine.var_counter += ids.length()
   let out = terms.map(fn(t) { replace_vars(t, m) })
-  (out, engine.var_counter)
+  (out, m, engine.var_counter)
+}
+
+///|
+/// 两组自由变量取值快照是否相等（逐元素结构相等）。
+fn bag_values_equal(
+  engine : Engine,
+  a : Array[LoveTerm],
+  b : Array[LoveTerm],
+) -> Bool {
+  if a.length() != b.length() {
+    return false
+  }
+  for i in 0..<a.length() {
+    if !term_equal(engine.subst, a[i], b[i]) {
+      return false
+    }
+  }
+  true
+}
+
+///|
+/// 按自由变量取值（标准序）对分组排序（setof 用）。
+fn sort_bag_groups(subst : Subst, groups : Array[BagGroup]) -> Unit {
+  for i in 1..<groups.length() {
+    let mut j = i
+    while j > 0 && bag_group_gt(subst, groups[j - 1], groups[j]) {
+      let tmp = groups[j - 1]
+      groups[j - 1] = groups[j]
+      groups[j] = tmp
+      j -= 1
+    }
+  }
+}
+
+///|
+/// 分组 a 的自由变量取值是否严格大于分组 b（逐元素标准序）。
+fn bag_group_gt(subst : Subst, a : BagGroup, b : BagGroup) -> Bool {
+  for i in 0..<a.values.length() {
+    let c = term_order(subst, a.values[i], b.values[i])
+    if c != 0 {
+      return c > 0
+    }
+  }
+  false
+}
+
+///|
+/// 把若干项复制到全新变量空间（findall 用）。
+fn copy_fresh(
+  engine : Engine,
+  terms : Array[LoveTerm],
+) -> (Array[LoveTerm], Int) {
+  let (out, _, n) = copy_fresh_map(engine, terms)
+  (out, n)
 }
 
 ///|

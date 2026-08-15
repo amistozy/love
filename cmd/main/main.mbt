@@ -39,7 +39,8 @@ async fn main {
   match query {
     None => repl(program)
     Some(qs) => {
-      let (q, names) = @love.parse_query_with_names(qs) catch {
+      // 使用程序当前的运算符表解析（支持 op/3 自定义运算符）
+      let (q, names) = @love.Program::parse_query_with_names(program, qs) catch {
         err => abort("error: \{err}")
       }
       batch_query(program, q, names)
@@ -510,7 +511,8 @@ fn ends_with_dot(line : String) -> Bool {
 /// 最后一个确定解以 `.` 结尾，无解/耗尽时输出 `false.`。
 /// 返回 true 表示用户按 Ctrl-D 退出整个 REPL。
 async fn run_query_line(program : @love.Program, line : String) -> Bool {
-  let (q, names) = @love.parse_query_with_names(line) catch {
+  // 使用程序当前的运算符表解析（支持 op/3 自定义运算符）
+  let (q, names) = @love.Program::parse_query_with_names(program, line) catch {
     err => {
       repl_println("syntax error: \{err}")
       return false
@@ -652,7 +654,7 @@ fn batch_query(
 
 ///|
 async fn print_banner() -> Unit {
-  repl_println("Love v0.1.0 — Prolog-style logic programming in MoonBit")
+  repl_println("Love v0.2.0 — Prolog-style logic programming in MoonBit")
   repl_println(
     "Type a query (e.g. `happy(X).`); `halt.` to quit; Ctrl-D to exit; Ctrl-L to clear.",
   )

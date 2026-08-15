@@ -102,22 +102,35 @@ X = alice
 
 ### 运算符
 
-Love 内置与 ISO/SWI 兼容的运算符优先级表：`:-`(1200) `;`(1100) `->`(1050) `,`(1000)
-`\+`(900) `=` `\=` `==` `\==` `is` `=:=` `=\=` `<` `=<` `>` `>=` `=..` `@<` 等(700)
-`+` `-`(500) `*` `/` `//` `mod` `rem` `div`(400) `^`(200) 以及前缀 `-` `+` `\`(200)。
+Love 内置与 ISO/SWI 兼容的运算符优先级表：`:-` `-->`(1200) `;`(1100) `->`(1050)
+`,`(1000) `\+`(900) `=` `\=` `==` `\==` `is` `=:=` `=\=` `<` `=<` `>` `>=` `=..`
+`@<` 等(700) `+` `-`(500) `*` `/` `//` `mod` `rem` `div`(400) `^`(200) 以及前缀
+`-` `+` `\`(200)。
+
+**自定义运算符**：`op(Prec, Type, Name)` 动态增删运算符（Type 为
+`xfx`/`xfy`/`yfx`/`fx`/`fy`，Prec 为 0..1200，0 删除，Name 为原子或原子列表），
+对之后解析的查询生效：
+
+```prolog
+?- op(500, yfx, foo).
+?- X = a foo b.
+X = foo(a, b)
+```
 
 ## 内置谓词
 
 | 类别 | 谓词 |
 | --- | --- |
-| 控制流 | `true/0` `fail/0` `!/0` `call/1` `,/2` `;/2` `->/2,3` `\+/1` `once/1` `repeat/0` |
+| 控制流 | `true/0` `fail/0` `!/0` `call/1` `,/2` `;/2` `->/2,3` `\+/1` `once/1` `repeat/0` `catch/3` `throw/1` |
 | 合一与项 | `=/2` `\=/2` `==/2` `\==/2` `unify_with_occurs_check/2` `var/1` `nonvar/1` `atom/1` `number/1` `integer/1` `float/1` `string/1` `atomic/1` `compound/1` `callable/1` `ground/1` `functor/3` `arg/3` `=../2` |
 | 原子操作 | `atom_length/2` `atom_concat/3` `sub_atom/5` `compare/3` `@</2` `@=</2` `@>/2` `@>=/2` |
 | 列表 | `member/2` `append/3` `length/2` `reverse/2` `sort/2` `msort/2` `sum_list/2` `maplist/2` `nth0/3` `nth1/3` |
 | 算术 | `is/2` `=:=/2` `=\=/2` `</2` `=</2` `>/2` `>=/2` `between/3` `plus/3`；可求值函子：`+ - * / // rem mod div abs max min sign sqrt exp log sin cos tan floor ceiling round truncate float integer ^` |
 | 动态库 | `assertz/1` `asserta/1` `retract/1` `clause/2` `listing/0` |
-| 收集 | `findall/3` |
-| I/O | `write/1` `writeln/1` `nl/0` |
+| 收集 | `findall/3` `bagof/3` `setof/3` |
+| DCG | `phrase/2` `phrase/3`；规则用 `-->` 定义 |
+| 运算符 | `op/3` |
+| I/O | `write/1` `writeln/1` `nl/0` `read/1` |
 
 ## 示例
 
@@ -147,6 +160,40 @@ F = 55
 max(X, Y, M) :- (X > Y -> M = X ; M = Y).
 ```
 
+### 异常
+
+```prolog
+?- catch(throw(bad), bad, true).
+true
+
+?- catch(throw(x), y, true).   % x 与 y 不合一 → 未捕获 → 查询失败
+false
+```
+
+### bagof/setof 分组收集
+
+```prolog
+?- bagof(X, member(X-Y, [1-a, 2-b, 3-a]), L).
+X = _0, Y = a, L = [1, 3]
+;
+X = _0, Y = b, L = [2]
+```
+
+### DCG 文法
+
+```prolog
+% examples/grammar.lv：a^n b^n
+s --> [].
+s --> [a], s, [b].
+
+?- phrase(s, [a, a, b, b]).
+true
+?- phrase(s, [a, b]).
+true
+?- phrase(s, [a]).
+false
+```
+
 ### 动态数据库
 
 ```prolog
@@ -160,31 +207,36 @@ X = pat
 
 ```
 love.mbt       公开 API 门面（parse_program / solve / REPL 服务）
-syntax.mbt     LoveTerm、Clause、Program 等类型（含内置库子句）
+syntax.mbt     LoveTerm、Clause、Program 等类型（含内置库子句、运算符表）
 lexer.mbt      词法分析（token 流）
-parser.mbt     Pratt 递归下降解析器（运算符优先级表）
+parser.mbt     Pratt 递归下降解析器（运算符优先级表、op/3 动态表）
+dcg.mbt        DCG 规则 → 普通子句的差表翻译
 unify.mbt      合一 + trail + occurs check
-engine.mbt     SLD 引擎（目标栈 + choice point 栈 + cut barrier）
+engine.mbt     SLD 引擎（目标栈 + choice point 栈 + cut barrier + catch 标记）
 builtins.mbt   内置谓词分发
 arith.mbt      算术表达式求值
 pretty.mbt     项打印（运算符、列表、引号规则）
+read_io_*.mbt  read/1 的 stdin 读取（native FFI / 其它目标占位）
+stub.c         read/1 的 C 实现
 cmd/main        CLI：加载文件 + 查询 + REPL
 ```
 
 求解器采用**惰性迭代器**：每次 `next()` 只推进到下一个解。回溯通过
-**trail + choice point（含目标栈快照）** 实现，cut 通过帧屏障截断 choice point 栈实现。
+**trail + choice point（含目标栈快照）** 实现，cut 通过帧屏障截断 choice point 栈实现；
+`catch/3` 通过目标栈上的内部标记帧实现，`throw/1` 向上恢复标记帧入口状态。
 
-## 与 ISO Prolog 的已知差异（v0.1）
+## 与 ISO Prolog 的已知差异（v0.2）
 
 1. 字符串 `"..."` 是字符串项，不是字符码列表；
 2. 合一**默认带 occurs check**（`X = f(X)` 失败），另提供 `unify_with_occurs_check/2`；
 3. 算术错误使目标失败而非抛出异常；
-4. 无 `catch/3`、`throw/1`、DCG、模块系统、自定义运算符；
-5. `bagof/3`、`setof/3` 未实现（`findall/3` 已实现）；
-6. `atom_concat/3` 在两个变量加一个原子的组合时不枚举所有切分。
+4. 未捕获的 `throw` 使整个查询失败（无错误打印与 `error/2`）；
+5. 无模块系统、`current_op/3`、postfix 运算符；
+6. `read/1` 只读取单行，wasm/js 目标上失败；
+7. `atom_concat/3` 在两个变量加一个原子的组合时不枚举所有切分。
 
 ## 路线图
 
 - [x] v0.1：解析器、合一、SLD 引擎、cut、内置谓词、算术、动态库、REPL
-- [ ] v0.2：`catch/throw`、`bagof/setof`、DCG、`read/1`、自定义运算符
+- [x] v0.2：`catch/throw`、`bagof/setof`、DCG、`read/1`、自定义运算符
 - [ ] v0.3：表驱动（tabling）、约束（CLP）、模块系统
