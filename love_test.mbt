@@ -724,3 +724,144 @@ test "errors in arithmetic fail the goal" {
   assert_true(qs_of("X is 1 + a.").is_empty())
   assert_true(qs_of("X is 1 // 0.").is_empty())
 }
+
+// ---------- 表驱动 tabling ----------
+
+///|
+test "tabling: left recursion terminates (transitive closure)" {
+  let src =
+    #|:- table reach/2.
+    #|reach(X, Y) :- edge(X, Z), reach(Z, Y).
+    #|reach(X, Y) :- edge(X, Y).
+    #|edge(a, b). edge(b, c). edge(c, a).
+    #|
+  // 无 tabling 时该左递归程序不终止
+  let sols = sols_of(src, "reach(a, X).")
+  sols.sort()
+  assert_eq(sols, ["reach(a, a)", "reach(a, b)", "reach(a, c)"])
+  // 每个查询独立求值：b 的闭包同样完备（含 reach(b, b)）
+  let sols2 = sols_of(src, "reach(b, X).")
+  sols2.sort()
+  assert_eq(sols2, ["reach(b, a)", "reach(b, b)", "reach(b, c)"])
+}
+
+///|
+test "tabling: mutual recursion" {
+  let src =
+    #|:- table a/1, b/1.
+    #|a(X) :- b(X).
+    #|b(X) :- a(X).
+    #|b(1).
+    #|
+  assert_eq(sols_of(src, "a(X)."), ["a(1)"])
+  assert_eq(sols_of(src, "b(X)."), ["b(1)"])
+}
+
+///|
+test "tabling: duplicate answers are removed" {
+  let src =
+    #|:- table p/1.
+    #|p(a). p(a). p(b).
+    #|
+  assert_eq(sols_of(src, "p(X)."), ["p(a)", "p(b)"])
+}
+
+///|
+test "tabling: non-ground answers replay with fresh variables" {
+  let src =
+    #|:- table p/1.
+    #|p(X).
+    #|
+  assert_eq(sols_of(src, "p(X).").length(), 1)
+  // 两次回放得到不同的全新变量
+  assert_true(sols_of(src, "p(X), p(Y), X == Y.").is_empty())
+}
+
+///|
+test "tabling: variant distinguishes repeated vs distinct variables" {
+  let src =
+    #|:- table p/2.
+    #|p(a, a).
+    #|
+  assert_eq(sols_of(src, "p(X, X)."), ["p(a, a)"])
+  assert_eq(sols_of(src, "p(X, Y)."), ["p(a, a)"])
+  assert_eq(sols_of(src, "p(X, a)."), ["p(a, a)"])
+  assert_true(sols_of(src, "p(X, b).").is_empty())
+}
+
+///|
+test "tabling: table directive comma and list forms" {
+  let comma =
+    #|:- table p/1, q/1.
+    #|p(X) :- p(X).
+    #|p(a).
+    #|q(X) :- q(X).
+    #|q(b).
+    #|
+  assert_eq(sols_of(comma, "p(X)."), ["p(a)"])
+  assert_eq(sols_of(comma, "q(X)."), ["q(b)"])
+  let list =
+    #|:- table([p/1]).
+    #|p(X) :- p(X).
+    #|p(a).
+    #|
+  assert_eq(sols_of(list, "p(X)."), ["p(a)"])
+}
+
+///|
+test "tabling: table/1 builtin works at runtime" {
+  // 未标记前：p(X,Y) :- p(Y,X) 左右互调，永不终止
+  let p = parse_program("p(X, Y) :- p(Y, X). p(a, b).")
+  // 运行时标记表驱动
+  assert_eq(solve_terms(p, parse_query("table(p/2).")).length(), 1)
+  // 最小不动点：{p(a,b), p(b,a)}
+  let sols = solve_terms(p, parse_query("p(X, Y).")).map(fn(t) {
+    format_term(t)
+  })
+  sols.sort()
+  assert_eq(sols, ["p(a, b)", "p(b, a)"])
+}
+
+///|
+test "tabling: works inside findall and setof" {
+  let src =
+    #|:- table reach/2.
+    #|reach(X, Y) :- edge(X, Z), reach(Z, Y).
+    #|reach(X, Y) :- edge(X, Y).
+    #|edge(a, b). edge(b, c). edge(c, a).
+    #|
+  // findall 在子引擎中收集全部解（表内答案顺序）
+  let sols = sols_of(src, "findall(Y, reach(a, Y), L).")
+  assert_eq(sols.length(), 1)
+  // setof 排序去重
+  let sols2 = sols_of(src, "setof(Y, reach(a, Y), S).")
+  assert_eq(sols2.length(), 1)
+}
+
+///|
+test "tabling: tables are fresh per query (assert visible immediately)" {
+  let src =
+    #|:- table p/1.
+    #|p(a).
+    #|
+  let p = parse_program(src)
+  assert_eq(solve_terms(p, parse_query("p(X).")).length(), 1)
+  // assertz 后新查询立即可见（每查询清空表）
+  assert_eq(solve_terms(p, parse_query("assertz(p(b)).")).length(), 1)
+  assert_eq(solve_terms(p, parse_query("p(X).")).length(), 2)
+  // abolish_table/1 与 abolish_all_tables/0 仍可用
+  assert_eq(solve_terms(p, parse_query("abolish_table(p/1).")).length(), 1)
+  assert_eq(solve_terms(p, parse_query("abolish_all_tables.")).length(), 1)
+  assert_eq(solve_terms(p, parse_query("p(X).")).length(), 2)
+}
+
+///|
+test "tabling: dcg non-terminal via p//1" {
+  let src =
+    #|:- table p//1.
+    #|p --> [a].
+    #|
+  // p//1 视同 p/3（DCG 翻译后），phrase 正常解析
+  assert_eq(sols_of(src, "phrase(p, [a]).").length(), 1)
+  assert_eq(sols_of(src, "phrase(p, X).").length(), 1)
+}

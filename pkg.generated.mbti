@@ -88,6 +88,9 @@ pub struct Program {
   preds : Map[String, PredClauses]
   directives : Array[LoveTerm]
   ops : Map[String, OpDef]
+  tabled : Map[String, Bool]
+  tables : Map[String, Array[TableEntry]]
+  passing : Array[Bool]
 }
 pub fn Program::empty() -> Self
 pub fn Program::new() -> Self
@@ -98,6 +101,11 @@ pub struct Solution {
   query : LoveTerm
   bindings : Map[Int, LoveTerm]
   more : Bool
+}
+
+pub struct TableEntry {
+  key : LoveTerm
+  answers : Array[LoveTerm]
 }
 
 // Type aliases

@@ -15,8 +15,18 @@ fn Engine::try_builtin(
       Some(true)
     }
     "," if n == 2 => {
-      engine.goals.push({ term: args[1], ci: 0, barrier: f.barrier })
-      engine.goals.push({ term: args[0], ci: 0, barrier: f.barrier })
+      engine.goals.push({
+        term: args[1],
+        ci: 0,
+        barrier: f.barrier,
+        bypass: false,
+      })
+      engine.goals.push({
+        term: args[0],
+        ci: 0,
+        barrier: f.barrier,
+        bypass: false,
+      })
       Some(true)
     }
     ";" if n == 2 => {
@@ -26,14 +36,19 @@ fn Engine::try_builtin(
         goals_snapshot: snapshot_goals(engine.goals),
         kind: CPKind::PushTerm(args[1], b),
       })
-      engine.goals.push({ term: args[0], ci: 0, barrier: b })
+      engine.goals.push({ term: args[0], ci: 0, barrier: b, bypass: false })
       Some(true)
     }
     "->" if n == 2 => {
       let b = engine.cps.length()
-      engine.goals.push({ term: args[1], ci: 0, barrier: b })
-      engine.goals.push({ term: LoveTerm::Atom("!"), ci: 0, barrier: b })
-      engine.goals.push({ term: args[0], ci: 0, barrier: b })
+      engine.goals.push({ term: args[1], ci: 0, barrier: b, bypass: false })
+      engine.goals.push({
+        term: LoveTerm::Atom("!"),
+        ci: 0,
+        barrier: b,
+        bypass: false,
+      })
+      engine.goals.push({ term: args[0], ci: 0, barrier: b, bypass: false })
       Some(true)
     }
     "->" if n == 3 => {
@@ -43,9 +58,14 @@ fn Engine::try_builtin(
         goals_snapshot: snapshot_goals(engine.goals),
         kind: CPKind::PushTerm(args[2], b),
       })
-      engine.goals.push({ term: args[1], ci: 0, barrier: b })
-      engine.goals.push({ term: LoveTerm::Atom("!"), ci: 0, barrier: b })
-      engine.goals.push({ term: args[0], ci: 0, barrier: b })
+      engine.goals.push({ term: args[1], ci: 0, barrier: b, bypass: false })
+      engine.goals.push({
+        term: LoveTerm::Atom("!"),
+        ci: 0,
+        barrier: b,
+        bypass: false,
+      })
+      engine.goals.push({ term: args[0], ci: 0, barrier: b, bypass: false })
       Some(true)
     }
     "\\+" if n == 1 => {
@@ -55,13 +75,28 @@ fn Engine::try_builtin(
         goals_snapshot: snapshot_goals(engine.goals),
         kind: CPKind::PushTerm(LoveTerm::Atom("true"), b),
       })
-      engine.goals.push({ term: LoveTerm::Atom("fail"), ci: 0, barrier: b })
-      engine.goals.push({ term: LoveTerm::Atom("!"), ci: 0, barrier: b })
-      engine.goals.push({ term: args[0], ci: 0, barrier: b })
+      engine.goals.push({
+        term: LoveTerm::Atom("fail"),
+        ci: 0,
+        barrier: b,
+        bypass: false,
+      })
+      engine.goals.push({
+        term: LoveTerm::Atom("!"),
+        ci: 0,
+        barrier: b,
+        bypass: false,
+      })
+      engine.goals.push({ term: args[0], ci: 0, barrier: b, bypass: false })
       Some(true)
     }
     "call" if n == 1 => {
-      engine.goals.push({ term: args[0], ci: 0, barrier: f.barrier })
+      engine.goals.push({
+        term: args[0],
+        ci: 0,
+        barrier: f.barrier,
+        bypass: false,
+      })
       Some(true)
     }
     // call/2,3：给目标追加参数后调用（DCG 的 call(G, S0, S) 等）
@@ -76,6 +111,7 @@ fn Engine::try_builtin(
             term: LoveTerm::Struct(nm, extra),
             ci: 0,
             barrier: f.barrier,
+            bypass: false,
           })
           Some(true)
         }
@@ -88,6 +124,7 @@ fn Engine::try_builtin(
             term: LoveTerm::Struct(nm, all),
             ci: 0,
             barrier: f.barrier,
+            bypass: false,
           })
           Some(true)
         }
@@ -96,9 +133,19 @@ fn Engine::try_builtin(
     "phrase" if n == 2 || n == 3 => Some(builtin_phrase(engine, args, f))
     "once" if n == 1 => {
       let b = engine.cps.length()
-      engine.goals.push({ term: LoveTerm::Atom("true"), ci: 0, barrier: b })
-      engine.goals.push({ term: LoveTerm::Atom("!"), ci: 0, barrier: b })
-      engine.goals.push({ term: args[0], ci: 0, barrier: b })
+      engine.goals.push({
+        term: LoveTerm::Atom("true"),
+        ci: 0,
+        barrier: b,
+        bypass: false,
+      })
+      engine.goals.push({
+        term: LoveTerm::Atom("!"),
+        ci: 0,
+        barrier: b,
+        bypass: false,
+      })
+      engine.goals.push({ term: args[0], ci: 0, barrier: b, bypass: false })
       Some(true)
     }
     "repeat" if n == 0 => {
@@ -306,6 +353,10 @@ fn Engine::try_builtin(
     "read" if n == 1 => Some(builtin_read(engine, args))
     // ---------- 动态运算符 ----------
     "op" if n == 3 => Some(builtin_op(engine, args))
+    // ---------- 表驱动 ----------
+    "table" if n == 1 => Some(builtin_table(engine, args))
+    "abolish_table" if n == 1 => Some(builtin_abolish_table(engine, args))
+    "abolish_all_tables" if n == 0 => Some(builtin_abolish_all_tables(engine))
     // ---------- 收集 ----------
     "findall" if n == 3 => Some(builtin_findall(engine, args))
     "bagof" if n == 3 => Some(builtin_bagof(engine, args, f, false))
@@ -329,7 +380,7 @@ fn builtin_catch(engine : Engine, args : Array[LoveTerm], f : Frame) -> Bool {
     LoveTerm::Int(f.barrier.to_int64()),
   ])
   // 先压标记，再压 Goal：Goal 先被处理，完成后标记弹出
-  engine.goals.push({ term: marker, ci: 0, barrier: f.barrier })
+  engine.goals.push({ term: marker, ci: 0, barrier: f.barrier, bypass: false })
   engine.push_body(args[0], f.barrier)
   true
 }
@@ -438,6 +489,44 @@ fn set_program_op(
 }
 
 ///|
+/// table(Spec)：把 Spec（`p/N`、`p//N`、`(p/1, q/2)`、`[p/1, q/2]`）中的
+/// 谓词标记为表驱动。可在指令（`:- table p/1.`）、规则体或 REPL 中调用。
+fn builtin_table(engine : Engine, args : Array[LoveTerm]) -> Bool {
+  let spec = engine.subst.deref(args[0])
+  let names : Array[String] = []
+  if !collect_table_names(spec, names) {
+    return false
+  }
+  for nm in names {
+    engine.program.tabled[nm] = true
+  }
+  true
+}
+
+///|
+/// abolish_table(Spec)：清除 Spec 中谓词的全部表项（谓词保持表驱动，下次调用重建）。
+fn builtin_abolish_table(engine : Engine, args : Array[LoveTerm]) -> Bool {
+  let spec = engine.subst.deref(args[0])
+  let names : Array[String] = []
+  if !collect_table_names(spec, names) {
+    return false
+  }
+  for nm in names {
+    engine.program.tables.remove(nm)
+  }
+  true
+}
+
+///|
+/// abolish_all_tables/0：清除全部表项（所有表驱动谓词下次调用重建）。
+fn builtin_abolish_all_tables(engine : Engine) -> Bool {
+  for k in engine.program.tables.keys() {
+    engine.program.tables.remove(k)
+  }
+  true
+}
+
+///|
 /// phrase(NT, L) → call NT with (L, [])；phrase(NT, L, R) → call NT with (L, R)。
 fn builtin_phrase(engine : Engine, args : Array[LoveTerm], f : Frame) -> Bool {
   let nt = engine.subst.deref(args[0])
@@ -452,6 +541,7 @@ fn builtin_phrase(engine : Engine, args : Array[LoveTerm], f : Frame) -> Bool {
         term: LoveTerm::Struct(nm, rest),
         ci: 0,
         barrier: f.barrier,
+        bypass: false,
       })
       true
     }
@@ -463,6 +553,7 @@ fn builtin_phrase(engine : Engine, args : Array[LoveTerm], f : Frame) -> Bool {
         term: LoveTerm::Struct(nm, all),
         ci: 0,
         barrier: f.barrier,
+        bypass: false,
       })
       true
     }
@@ -727,7 +818,7 @@ fn builtin_maplist(engine : Engine, args : Array[LoveTerm], f : Frame) -> Bool {
         let goal_i = apply_goal(g, elems[i])
         conj = LoveTerm::Struct(",", [goal_i, conj])
       }
-      engine.goals.push({ term: conj, ci: 0, barrier: f.barrier })
+      engine.goals.push({ term: conj, ci: 0, barrier: f.barrier, bypass: false })
       true
     }
   }

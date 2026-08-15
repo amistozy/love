@@ -1,0 +1,13 @@
+% 表驱动示例：可达性 / 传递闭包。
+% 无表驱动时，reach/2 的左递归（第一条规则）会无限循环；
+% `:- table reach/2.` 使求解按变体记忆化并以全局不动点终止。
+
+:- table reach/2.
+
+reach(X, Y) :- edge(X, Z), reach(Z, Y).
+reach(X, Y) :- edge(X, Y).
+
+edge(a, b).
+edge(b, c).
+edge(c, a).
+edge(b, d).

@@ -1,16 +1,19 @@
 ///|
-/// 目标帧：待求解目标 + 子句游标 + cut 屏障。
+/// 目标帧：待求解目标 + 子句游标 + cut 屏障 + 是否绕过表驱动拦截。
+/// bypass 仅用于表驱动批量求解：变体目标自身的子句枚举帧（含回溯重推的帧）
+/// 需要直接按子句求值，而不是被表驱动拦截回放。
 priv struct Frame {
   term : LoveTerm
   ci : Int
   barrier : Int
+  bypass : Bool
 }
 
 ///|
 /// choice point 种类。
 priv enum CPKind {
   /// 谓词调用：回溯时尝试下一条子句
-  NextClause(LoveTerm, Int, Int)
+  NextClause(LoveTerm, Int, Int, Bool)
   /// 控制结构：回溯时压入指定目标
   PushTerm(LoveTerm, Int)
   /// clause/2：扫描子句列表
@@ -19,6 +22,8 @@ priv enum CPKind {
   EnumInt(Int64, Int64, LoveTerm)
   /// bagof/setof：枚举分组（i 为下一组下标）
   EnumBag(Int, Array[BagGroup], Array[Int], LoveTerm, Int)
+  /// 表驱动：枚举变体答案（i 为下一答案下标；answers 为规范形式）
+  TableAnswer(Int, Array[LoveTerm], LoveTerm, Int)
 }
 
 ///|
@@ -105,7 +110,7 @@ fn Engine::new(
   {
     program,
     subst: Subst::new(),
-    goals: [{ term: query, ci: 0, barrier: 0 }],
+    goals: [{ term: query, ci: 0, barrier: 0, bypass: false }],
     cps: [],
     var_counter: start_counter,
     found: false,
@@ -155,7 +160,6 @@ fn Engine::solve_next(engine : Engine) -> LoveTerm? {
 }
 
 ///|
-/// 处理一个目标帧，返回该目标是否成功。
 fn Engine::process(engine : Engine, f : Frame) -> Bool {
   match engine.subst.deref(f.term) {
     LoveTerm::Atom("true") => true
@@ -164,13 +168,14 @@ fn Engine::process(engine : Engine, f : Frame) -> Bool {
       engine.cps.truncate(f.barrier)
       true
     }
-    LoveTerm::Atom(name) => engine.call_predicate(name, [], f)
+    LoveTerm::Atom(name) => engine.call_predicate(name, [], f, f.bypass)
     LoveTerm::Var(_) => false
     LoveTerm::Int(_) | LoveTerm::Float(_) | LoveTerm::Str(_) => false
     LoveTerm::ListCons(_, _) | LoveTerm::ListNil => false
     // catch 标记帧：Goal 正常完成后弹出，结束 catch 作用域
     LoveTerm::Struct("$love_catch", _) => true
-    LoveTerm::Struct(name, args) => engine.call_predicate(name, args, f)
+    LoveTerm::Struct(name, args) =>
+      engine.call_predicate(name, args, f, f.bypass)
   }
 }
 
@@ -218,16 +223,22 @@ fn Engine::do_throw(engine : Engine, ball : LoveTerm) -> Bool {
 }
 
 ///|
-/// 调用谓词：内置优先，否则查找子句。
+/// 调用谓词：内置优先，否则查找子句（表驱动谓词走 tabled_call）。
 fn Engine::call_predicate(
   engine : Engine,
   name : String,
   args : Array[LoveTerm],
   f : Frame,
+  bypass : Bool,
 ) -> Bool {
   match engine.try_builtin(name, args, f) {
     Some(ok) => ok
-    None => engine.clause_call(f.term, f)
+    None =>
+      if engine.program.tabled.contains(name) && !bypass {
+        engine.tabled_call(f.term, f)
+      } else {
+        engine.clause_call(f.term, f)
+      }
   }
 }
 
@@ -247,7 +258,7 @@ fn Engine::clause_call(engine : Engine, goal : LoveTerm, f : Frame) -> Bool {
   engine.cps.push({
     trail_len: engine.subst.trail.length(),
     goals_snapshot: snapshot_goals(engine.goals),
-    kind: CPKind::NextClause(f.term, f.ci + 1, f.barrier),
+    kind: CPKind::NextClause(f.term, f.ci + 1, f.barrier, f.bypass),
   })
   let (head, body) = fresh_clause_vars(engine, c)
   if !unify(engine.subst, goal, head) {
@@ -259,7 +270,7 @@ fn Engine::clause_call(engine : Engine, goal : LoveTerm, f : Frame) -> Bool {
 }
 
 ///|
-/// 压入子句体目标（展开逗号连接）。
+/// 压入子句体目标（展开逗号连接）。体目标帧不绕过表驱动拦截。
 fn Engine::push_body(engine : Engine, body : LoveTerm, barrier : Int) -> Unit {
   match engine.subst.deref(body) {
     LoveTerm::Atom("true") => ()
@@ -267,7 +278,7 @@ fn Engine::push_body(engine : Engine, body : LoveTerm, barrier : Int) -> Unit {
       engine.push_body(b, barrier)
       engine.push_body(a, barrier)
     }
-    other => engine.goals.push({ term: other, ci: 0, barrier })
+    other => engine.goals.push({ term: other, ci: 0, barrier, bypass: false })
   }
 }
 
@@ -285,12 +296,12 @@ fn Engine::backtrack(engine : Engine) -> Bool {
     engine.subst.unbind_to(cp.trail_len)
     engine.goals = cp.goals_snapshot
     match cp.kind {
-      CPKind::NextClause(term, ci, barrier) => {
-        engine.goals.push({ term, ci, barrier })
+      CPKind::NextClause(term, ci, barrier, bypass) => {
+        engine.goals.push({ term, ci, barrier, bypass })
         return true
       }
       CPKind::PushTerm(term, barrier) => {
-        engine.goals.push({ term, ci: 0, barrier })
+        engine.goals.push({ term, ci: 0, barrier, bypass: false })
         return true
       }
       CPKind::ClauseScan(ci, h, b, all) => {
@@ -340,6 +351,25 @@ fn Engine::backtrack(engine : Engine) -> Bool {
             return true
           }
         }
+      CPKind::TableAnswer(i, answers, goal, barrier) => {
+        // 依次尝试剩余答案；每个答案回放时重命名为全新变量
+        let mut idx = i
+        while idx < answers.length() {
+          let before = engine.subst.trail.length()
+          if unify(engine.subst, goal, rename_answer(engine, answers[idx])) {
+            if idx + 1 < answers.length() {
+              engine.cps.push({
+                trail_len: before,
+                goals_snapshot: snapshot_goals(engine.goals),
+                kind: CPKind::TableAnswer(idx + 1, answers, goal, barrier),
+              })
+            }
+            return true
+          }
+          engine.subst.unbind_to(cp.trail_len)
+          idx += 1
+        }
+      }
     }
   }
 }
@@ -366,7 +396,7 @@ fn apply_bag_group(
 fn Engine::has_pending(engine : Engine) -> Bool {
   for cp in engine.cps {
     let pending = match cp.kind {
-      CPKind::NextClause(term, ci, _) => {
+      CPKind::NextClause(term, ci, _, _) => {
         let name = match term {
           LoveTerm::Atom(n) => n
           LoveTerm::Struct(n, _) => n
@@ -378,6 +408,7 @@ fn Engine::has_pending(engine : Engine) -> Bool {
       CPKind::ClauseScan(ci, _, _, all) => ci < all.length()
       CPKind::EnumInt(lo, hi, _) => lo <= hi
       CPKind::EnumBag(i, groups, _, _, _) => i < groups.length()
+      CPKind::TableAnswer(i, answers, _, _) => i < answers.length()
     }
     if pending {
       return true

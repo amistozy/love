@@ -518,6 +518,15 @@ async fn run_query_line(program : @love.Program, line : String) -> Bool {
       return false
     }
   }
+  // 指令行 `:- Goal.`：执行一次（如 `:- table p/1.` 标记表驱动谓词）
+  match q {
+    @love.LoveTerm::Struct(":-", [g]) => {
+      let ok = @love.solve_terms(program, g).length() > 0
+      repl_println(if ok { "   true." } else { "   false." })
+      return false
+    }
+    _ => ()
+  }
   let iter = @love.solve(program, q)
   // 状态机：need_ask 在打印下一个解之前询问（Scryer 的 read_input 语义）
   let mut first = true
@@ -654,7 +663,7 @@ fn batch_query(
 
 ///|
 async fn print_banner() -> Unit {
-  repl_println("Love v0.2.0 — Prolog-style logic programming in MoonBit")
+  repl_println("Love v0.3.0 — Prolog-style logic programming in MoonBit")
   repl_println(
     "Type a query (e.g. `happy(X).`); `halt.` to quit; Ctrl-D to exit; Ctrl-L to clear.",
   )

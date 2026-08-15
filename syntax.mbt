@@ -56,6 +56,12 @@ pub struct Program {
   directives : Array[LoveTerm]
   /// 运算符表（op/3 可动态修改；默认内置表）
   ops : Map[String, OpDef]
+  /// 标记为表驱动的谓词名（`:- table p/1.` 指令与 table/1 内置）
+  tabled : Map[String, Bool]
+  /// 表驱动运行时表：谓词名 -> 变体表项（每查询开始清空）
+  tables : Map[String, Array[TableEntry]]
+  /// 全局不动点求解的重入锁（批量求解子引擎中创建新变体时不再嵌套触发）
+  passing : Array[Bool]
 }
 
 ///|
@@ -69,7 +75,14 @@ pub fn Program::new() -> Program {
 ///|
 /// 创建不注入库子句的空程序（解析器用：先加用户子句再注入库）。
 pub fn Program::empty() -> Program {
-  { preds: Map([]), directives: [], ops: op_table() }
+  {
+    preds: Map([]),
+    directives: [],
+    ops: op_table(),
+    tabled: Map([]),
+    tables: Map([]),
+    passing: [false],
+  }
 }
 
 ///|

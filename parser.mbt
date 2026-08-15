@@ -39,6 +39,8 @@ fn op_table() -> Map[String, OpDef] {
   add_inf("->", 1050, OpSpec::XFY)
   add_inf(",", 1000, OpSpec::XFY)
   add_pre("\\+", 900, OpSpec::FY)
+  // 表驱动指令（参考 trealla 的 op(1150, fx, table)）
+  add_pre("table", 1150, OpSpec::FX)
   for
     n in [
       "=", "\\=", "==", "\\==", "@<", "@=<", "@>", "@>=", "is", "=:=", "=\\=", "<",
@@ -383,7 +385,28 @@ fn Parser::parse_program_into(
         let top = parser.parse_top_level()
         match top {
           TopLevel::Rule(clause) => program.add_source_clause(clause)
-          TopLevel::Directive(g) => program.directives.push(g)
+          TopLevel::Directive(g) =>
+            // `:- table p/1.`、`:- table p/1, q/2.` 在解析期标记表驱动谓词，
+            // 不进入指令表（避免运行期把 table(...) 当普通目标执行）。
+            match table_directive_specs(g) {
+              Some(items) => {
+                let names : Array[String] = []
+                let mut ok = true
+                for item in items {
+                  if !collect_table_names(item, names) {
+                    ok = false
+                  }
+                }
+                if ok {
+                  for nm in names {
+                    program.tabled[nm] = true
+                  }
+                } else {
+                  program.directives.push(g)
+                }
+              }
+              None => program.directives.push(g)
+            }
         }
       }
     }
@@ -414,6 +437,39 @@ fn Parser::parse_top_level(parser : Parser) -> TopLevel raise LoveError {
     LoveTerm::Struct("-->", [h, b]) =>
       TopLevel::Rule(dcg_translate(parser, h, b))
     other => TopLevel::Rule({ head: other, body: LoveTerm::Atom("true") })
+  }
+}
+
+///|
+/// 指令是否为 table 指令：`:- table p/1.`、`:- table p/1, q/2.`（顶层逗号链中
+/// 出现 table(...) 即视为表驱动指令，所有顶层连词作为表规格，与 SWI/trealla
+/// 的 term_expansion 行为一致）。返回 None 表示不是 table 指令。
+fn table_directive_specs(g : LoveTerm) -> Array[LoveTerm]? {
+  match g {
+    LoveTerm::Struct("table", [x]) => Some([x])
+    LoveTerm::Struct(",", _) => {
+      let conjuncts : Array[LoveTerm] = []
+      flatten_conjuncts(g, conjuncts)
+      for c in conjuncts {
+        if c is LoveTerm::Struct("table", _) {
+          return Some(conjuncts)
+        }
+      }
+      None
+    }
+    _ => None
+  }
+}
+
+///|
+/// 展开顶层逗号连词链。
+fn flatten_conjuncts(t : LoveTerm, out : Array[LoveTerm]) -> Unit {
+  match t {
+    LoveTerm::Struct(",", [a, b]) => {
+      flatten_conjuncts(a, out)
+      flatten_conjuncts(b, out)
+    }
+    other => out.push(other)
   }
 }
 

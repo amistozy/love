@@ -105,8 +105,8 @@ happy(X) :- likes(X, bob).
 
 ### 运算符
 
-Love 内置与 ISO/SWI 兼容的运算符优先级表：`:-` `-->`(1200) `;`(1100) `->`(1050)
-`,`(1000) `\+`(900) `=` `\=` `==` `\==` `is` `=:=` `=\=` `<` `=<` `>` `>=` `=..`
+Love 内置与 ISO/SWI 兼容的运算符优先级表：`:-` `-->`(1200) `table`(1150, 前缀)
+`;`(1100) `->`(1050) `,`(1000) `\+`(900) `=` `\=` `==` `\==` `is` `=:=` `=\=` `<` `=<` `>` `>=` `=..`
 `@<` 等(700) `+` `-`(500) `*` `/` `//` `mod` `rem` `div`(400) `^`(200) 以及前缀
 `-` `+` `\`(200)。
 
@@ -132,6 +132,7 @@ Love 内置与 ISO/SWI 兼容的运算符优先级表：`:-` `-->`(1200) `;`(110
 | 算术 | `is/2` `=:=/2` `=\=/2` `</2` `=</2` `>/2` `>=/2` `between/3` `plus/3`；可求值函子：`+ - * / // rem mod div abs max min sign sqrt exp log sin cos tan floor ceiling round truncate float integer ^` |
 | 动态库 | `assertz/1` `asserta/1` `retract/1` `clause/2` `listing/0` |
 | 收集 | `findall/3` `bagof/3` `setof/3` |
+| 表驱动 | `table/1` `abolish_table/1` `abolish_all_tables/0`；指令 `:- table p/1.` |
 | DCG | `phrase/2` `phrase/3`；规则用 `-->` 定义 |
 | 运算符 | `op/3` |
 | I/O | `write/1` `writeln/1` `nl/0` `read/1` |
@@ -208,6 +209,34 @@ s --> [a], s, [b].
 ;  X = pat.
 ```
 
+### 表驱动 tabling
+
+`:- table p/1.` 把谓词标记为**表驱动**（变体记忆化 + 全局不动点）：左递归程序
+不再无限循环，传递闭包等查询可正常终止（见 `examples/reach.lv`）：
+
+```prolog
+:- table reach/2.
+
+reach(X, Y) :- edge(X, Z), reach(Z, Y).
+reach(X, Y) :- edge(X, Y).
+
+edge(a, b). edge(b, c). edge(c, a). edge(b, d).
+```
+
+```prolog
+?- reach(a, X).
+   X = b
+;  X = c
+;  X = d
+;  X = a.
+
+?- setof(X, reach(a, X), L).
+   L = [a, b, c, d].
+```
+
+表在**每个查询开始时清空**，因此 `assertz/retract` 对后续查询立即可见；
+`abolish_table/1`、`abolish_all_tables/0` 用于当前查询求解过程中的手动清除。
+
 ## 实现架构
 
 ```
@@ -218,6 +247,7 @@ parser.mbt     Pratt 递归下降解析器（运算符优先级表、op/3 动态
 dcg.mbt        DCG 规则 → 普通子句的差表翻译
 unify.mbt      合一 + trail + occurs check
 engine.mbt     SLD 引擎（目标栈 + choice point 栈 + cut barrier + catch 标记）
+tabling.mbt    表驱动（变体规范化、全局不动点、答案回放）
 builtins.mbt   内置谓词分发
 arith.mbt      算术表达式求值
 pretty.mbt     项打印（运算符、列表、引号规则）
@@ -230,7 +260,7 @@ cmd/main        CLI：加载文件 + 查询 + REPL
 **trail + choice point（含目标栈快照）** 实现，cut 通过帧屏障截断 choice point 栈实现；
 `catch/3` 通过目标栈上的内部标记帧实现，`throw/1` 向上恢复标记帧入口状态。
 
-## 与 ISO Prolog 的已知差异（v0.2）
+## 与 ISO Prolog 的已知差异（v0.3）
 
 1. 字符串 `"..."` 是字符串项，不是字符码列表；
 2. 合一**默认带 occurs check**（`X = f(X)` 失败），另提供 `unify_with_occurs_check/2`；
@@ -238,10 +268,13 @@ cmd/main        CLI：加载文件 + 查询 + REPL
 4. 未捕获的 `throw` 使整个查询失败（无错误打印与 `error/2`）；
 5. 无模块系统、`current_op/3`、postfix 运算符；
 6. `read/1` 只读取单行，wasm/js 目标上失败；
-7. `atom_concat/3` 在两个变量加一个原子的组合时不枚举所有切分。
+7. `atom_concat/3` 在两个变量加一个原子的组合时不枚举所有切分；
+8. 表按谓词名（不区分元数）生效；表在每查询开始时清空（assert/retract 立即可见）；
+   表内 cut 作用域限定在批量求值的子引擎内。
 
 ## 路线图
 
 - [x] v0.1：解析器、合一、SLD 引擎、cut、内置谓词、算术、动态库、REPL
 - [x] v0.2：`catch/throw`、`bagof/setof`、DCG、`read/1`、自定义运算符
-- [ ] v0.3：表驱动（tabling）、约束（CLP）、模块系统
+- [x] v0.3：表驱动（tabling）
+- [ ] v0.4：约束（CLP）、模块系统

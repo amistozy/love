@@ -22,6 +22,11 @@ pub struct Solution {
 ///|
 /// 惰性求解：每次迭代推进到下一个解。
 pub fn solve(program : Program, query : LoveTerm) -> Iter[Solution] {
+  // 每个查询开始时清空表驱动运行时表：assert/retract 对后续查询立即可见，
+  // 且本查询的全局不动点求解总是从干净状态开始。
+  for k in program.tables.keys() {
+    program.tables.remove(k)
+  }
   let var_ids = query_var_ids(query)
   let start = max_var_id(query) + 1
   let engine = Engine::new(program, start, query)
