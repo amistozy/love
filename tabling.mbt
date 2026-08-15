@@ -15,7 +15,7 @@
 /// 限制：
 /// - 表按谓词**名**生效（不区分元数）；`p//N` 视同 `p/(N+2)`（DCG 翻译后）；
 /// - 变体/答案可无限增殖时（如 `p(X) :- p(f(X)).`、`p(X) :- q(Y).` 且 q 有
-///   无限多答案）可能不终止；达到 `max_table_variants` / `max_table_answers`
+///   无限多答案）可能不终止；达到 `MAX_TABLE_VARIANTS` / `MAX_TABLE_ANSWERS`
 ///   上限时整个查询失败（抛 resource_error 球）。
 
 ///|
@@ -28,11 +28,11 @@ pub struct TableEntry {
 
 ///|
 /// 单谓词变体表项数上限（防止变体无限增殖挂起 REPL）。
-let max_table_variants = 10000
+const MAX_TABLE_VARIANTS = 10000
 
 ///|
 /// 单变体答案数上限（防止答案无限增殖挂起 REPL）。
-let max_table_answers = 65536
+const MAX_TABLE_ANSWERS = 65536
 
 ///|
 /// 变体规范化：把项中变量按首次出现顺序替换为 Var(0), Var(1), ...
@@ -148,7 +148,7 @@ fn Engine::tabled_call(engine : Engine, goal : LoveTerm, f : Frame) -> Bool {
   let entry = match found {
     Some(e) => e
     None => {
-      if arr.length() >= max_table_variants {
+      if arr.length() >= MAX_TABLE_VARIANTS {
         engine.uncaught = Some(
           LoveTerm::Struct("resource_error", [
             LoveTerm::Atom("table_variant_limit"),
@@ -261,7 +261,7 @@ fn Engine::batch_eval(engine : Engine, entry : TableEntry) -> Int? {
           }
         }
         if !dup {
-          if entry.answers.length() >= max_table_answers {
+          if entry.answers.length() >= MAX_TABLE_ANSWERS {
             engine.uncaught = Some(
               LoveTerm::Struct("resource_error", [
                 LoveTerm::Atom("table_answer_limit"),
